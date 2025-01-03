@@ -18,8 +18,6 @@ requirements:
 	$(PYTHON_INTERPRETER) -m pip install -r requirements.txt
 	
 
-
-
 ## Delete all compiled Python files
 .PHONY: clean
 clean:
@@ -39,8 +37,6 @@ format:
 	black --config pyproject.toml pair_prediction
 
 
-
-
 ## Set up python interpreter environment
 .PHONY: create_environment
 create_environment:
@@ -49,8 +45,6 @@ create_environment:
 	
 	@echo ">>> conda env created. Activate with:\nconda activate $(PROJECT_NAME)"
 	
-
-
 
 #################################################################################
 # PROJECT RULES                                                                 #

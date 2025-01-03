@@ -3,4 +3,9 @@ flake8
 isort
 pip
 python-dotenv
+numpy
+matplotlib
+networkx
+torch
+torch_geometric
 -e .
