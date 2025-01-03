@@ -2,12 +2,14 @@ import numpy as np
 import networkx as nx
 from sklearn.preprocessing import OneHotEncoder
 
+
 def one_hot_encode_sequence(seq: str) -> np.ndarray:
     """
     One-hot encodes a sequence of amino acids or nucleotides.
     """
-    encoder = OneHotEncoder(categories=[['A', 'C', 'G', 'U']])
+    encoder = OneHotEncoder(categories=[["A", "C", "G", "U"]])
     return encoder.fit_transform(np.array(list(seq)).reshape(-1, 1)).toarray()
+
 
 def get_phosphodiester_bonds_matrix(seq: str) -> np.ndarray:
     """
@@ -19,6 +21,7 @@ def get_phosphodiester_bonds_matrix(seq: str) -> np.ndarray:
         bonds[i + 1, i] = 1
     return bonds
 
+
 def one_hot_edges(edges_matrix: np.ndarray, num_classes: int = 15) -> np.ndarray:
     """
     One-hot encodes the edges between nodes in a graph.
@@ -27,6 +30,7 @@ def one_hot_edges(edges_matrix: np.ndarray, num_classes: int = 15) -> np.ndarray
     for edge_class in range(num_classes):
         one_hot_matrix[edges_matrix == edge_class, edge_class] = 1
     return one_hot_matrix
+
 
 def create_rna_graph(seq: str, pairings_matrix: np.ndarray) -> nx.Graph:
     """
@@ -39,7 +43,7 @@ def create_rna_graph(seq: str, pairings_matrix: np.ndarray) -> nx.Graph:
     nodes_features = one_hot_encode_sequence(seq)
     for i, node in enumerate(seq):
         G.add_node(i, features=nodes_features[i])
-    
+
     bond_matrix = get_phosphodiester_bonds_matrix(seq)
     pairings_matrix[pairings_matrix > 0] += 1
     edges_matrix = bond_matrix + pairings_matrix
