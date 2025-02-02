@@ -8,4 +8,6 @@ matplotlib
 networkx
 torch
 torch_geometric
+lightning
+neptune-client
 -e .

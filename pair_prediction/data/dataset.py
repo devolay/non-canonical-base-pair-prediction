@@ -29,24 +29,34 @@ class LinkPredictionDataset(Dataset):
         amt_matrix = read_matrix_file(amt_file)
 
         graph = create_rna_graph(seq, amt_matrix)
+
+        noncanonical_edges = []
+        for u, v, data in list(graph.edges(data=True)):
+            if data.get("edge_type") == "non-canonical":
+                noncanonical_edges.append((u, v))
+                graph.remove_edge(u, v) # Mask to avoid message passing through non-canonical edges
+
         pyg_graph = from_networkx(graph)
 
-        pos_edge_indices = torch.tensor(list(pyg_graph.edge_index.t().numpy()), dtype=torch.long)
-        neg_edge_indices = self.sample_negative_edges(pyg_graph)
+        pos_edge_indices = torch.tensor(noncanonical_edges, dtype=torch.float32)
+        neg_edge_indices = self.sample_negative_edges(pyg_graph, noncanonical_edges)
 
         return pyg_graph, pos_edge_indices, neg_edge_indices
 
-    def sample_negative_edges(self, graph):
+    def sample_negative_edges(self, graph, pos_edges):
         """
-        Samples negative edges for link prediction.
+        Samples negative edges for link prediction based on non-canonical edges.
         """
         nodes = list(range(graph.num_nodes))
-        existing_edges = set(tuple(edge) for edge in graph.edge_index.t().numpy())
-        neg_edges = []
-        while len(neg_edges) < len(existing_edges):
-            u, v = random.sample(nodes, 2)
-            if (u, v) not in existing_edges:
-                neg_edges.append((u, v))
+        existing_edges = set()
+        for u, v in pos_edges:
+            existing_edges.add((u, v))
+            existing_edges.add((v, u))
 
-        neg_edge_indices = torch.tensor(neg_edges, dtype=torch.long)
+        neg_edges = []
+        while len(neg_edges) < len(pos_edges):
+            u, v = random.sample(nodes, 2)
+            if (u, v) not in existing_edges and (v, u) not in existing_edges:
+                neg_edges.append((u, v))
+        neg_edge_indices = torch.tensor(neg_edges, dtype=torch.float32)
         return neg_edge_indices

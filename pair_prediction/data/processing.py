@@ -8,14 +8,14 @@ def one_hot_encode_sequence(seq: str) -> np.ndarray:
     One-hot encodes a sequence of amino acids or nucleotides.
     """
     encoder = OneHotEncoder(categories=[["A", "C", "G", "U"]])
-    return encoder.fit_transform(np.array(list(seq)).reshape(-1, 1)).toarray()
+    return encoder.fit_transform(np.array(list(seq)).reshape(-1, 1)).toarray().astype(np.float32)
 
 
 def get_phosphodiester_bonds_matrix(seq: str) -> np.ndarray:
     """
     Creates a matrix of phosphodiester bonds between nucleotides in a sequence.
     """
-    bonds = np.zeros((len(seq), len(seq)), dtype=int)
+    bonds = np.zeros((len(seq), len(seq)), dtype=np.float32)
     for i in range(len(seq) - 1):
         bonds[i, i + 1] = 1
         bonds[i + 1, i] = 1
@@ -26,13 +26,13 @@ def one_hot_edges(edges_matrix: np.ndarray, num_classes: int = 15) -> np.ndarray
     """
     One-hot encodes the edges between nodes in a graph.
     """
-    one_hot_matrix = np.zeros((edges_matrix.shape[0], edges_matrix.shape[1], num_classes))
+    one_hot_matrix = np.zeros((edges_matrix.shape[0], edges_matrix.shape[1], num_classes), dtype=np.float32)
     for edge_class in range(num_classes):
         one_hot_matrix[edges_matrix == edge_class, edge_class] = 1
     return one_hot_matrix
 
 
-def create_rna_graph(seq: str, pairings_matrix: np.ndarray) -> nx.Graph:
+def create_rna_graph(seq: str, pairings_matrix: np.ndarray, simple: bool = True) -> nx.Graph:
     """
     Creates a NetworkX graph fromsa sequence and an edge matrix.
 
@@ -45,12 +45,24 @@ def create_rna_graph(seq: str, pairings_matrix: np.ndarray) -> nx.Graph:
         G.add_node(i, features=nodes_features[i])
 
     bond_matrix = get_phosphodiester_bonds_matrix(seq)
-    pairings_matrix[pairings_matrix > 0] += 1
+
+    if simple:
+        pairings_matrix[pairings_matrix == 1] = 2 # Canonical base pairs
+        pairings_matrix[pairings_matrix > 1] = 3 # Non-canonical base pairs
+    else:
+        pairings_matrix[pairings_matrix > 0] += 1 # Canonical base pairs and non-canonical base pairs (with different classes)
+
     edges_matrix = bond_matrix + pairings_matrix
     edges_features = one_hot_edges(edges_matrix)
     for i in range(len(seq)):
         for j in range(i + 1, len(seq)):
-            if edges_matrix[i, j] > 0:
-                G.add_edge(i, j, features=edges_features[i, j])
-
+            edge_type = edges_matrix[i, j]
+            features = edges_features[i, j]
+            match edge_type:
+                case 1:
+                    G.add_edge(i, j, features=features, edge_type='phosphodiester')
+                case 2:
+                    G.add_edge(i, j, features=features, edge_type='canonical')
+                case edge_type if edge_type > 2:
+                    G.add_edge(i, j, features=features, edge_type='non-canonical')
     return G

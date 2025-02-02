@@ -3,7 +3,7 @@ import networkx as nx
 import numpy as np
 
 
-def draw_rna_structure(seq: str, amt_matrix: np.ndarray):
+def draw_rna_structure(seq: str, amt_matrix: np.ndarray, save_path: str = None):
     n = len(seq)
     G = nx.Graph()
     for i in range(n):
@@ -30,12 +30,23 @@ def draw_rna_structure(seq: str, amt_matrix: np.ndarray):
 
     pos = nx.circular_layout(G)
 
-    plt.figure(figsize=(20, 20))
-    nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=2000)
-    nx.draw_networkx_labels(G, pos, {i: seq[i] for i in G.nodes()}, font_color="black")
+    plt.figure(figsize=(10, 10))
     nx.draw_networkx_edges(G, pos, edge_color=edge_colors, edgelist=G.edges())
     nx.draw_networkx_edges(G, pos, edgelist=sequence_edges, edge_color="gray", style="dashed")
-
+    # Add legend
+    canonical_edge = plt.Line2D([0], [0], color="black", lw=2)
+    non_canonical_edge = plt.Line2D([0], [0], color="orange", lw=2)
+    sequence_edge = plt.Line2D([0], [0], color="gray", lw=2, linestyle="dashed")
+    plt.legend(
+        [canonical_edge, non_canonical_edge, sequence_edge],
+        ["Canonical", "Non-canonical", "Sequence"],
+        loc="upper right",
+    )
+    
+    nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=1000)
+    nx.draw_networkx_labels(G, pos, {i: seq[i] for i in G.nodes()}, font_color="black")
     plt.title("RNA simplified graph")
     plt.axis("off")
+    if save_path:
+        plt.savefig(save_path)
     plt.show()

@@ -26,16 +26,11 @@ def read_idx_file(idx_filename: Union[Path, str]) -> Tuple[str, Dict[str, Any]]:
             if len(row) < 2:
                 continue
             res_number = int(row[0].strip())
-            chain_and_res = row[1].strip()
+            chain_and_res = row[1].strip().replace("^", "")
 
-            if "." in chain_and_res:
-                chain_id, res_full = chain_and_res.split(".", 1)
-                res_type = res_full[0]
-                res_id = int(res_full[1:])
-            else:
-                chain_id = None
-                res_type = chain_and_res[0]
-                res_id = int(chain_and_res[1:])
+            chain_id, res_full = chain_and_res[0], chain_and_res[2:]
+            res_type = res_full[0]
+            res_id = res_full[1:]
 
             seq.append(res_type)
             details.append(
