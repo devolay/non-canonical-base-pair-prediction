@@ -34,7 +34,9 @@ class LinkPredictionDataset(Dataset):
         for u, v, data in list(graph.edges(data=True)):
             if data.get("edge_type") == "non-canonical":
                 noncanonical_edges.append((u, v))
-                graph.remove_edge(u, v) # Mask to avoid message passing through non-canonical edges
+                graph.remove_edge(
+                    u, v
+                )  # Mask to avoid message passing through non-canonical edges
 
         pyg_graph = from_networkx(graph)
 

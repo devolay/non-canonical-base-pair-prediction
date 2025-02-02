@@ -42,7 +42,7 @@ def draw_rna_structure(seq: str, amt_matrix: np.ndarray, save_path: str = None):
         ["Canonical", "Non-canonical", "Sequence"],
         loc="upper right",
     )
-    
+
     nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=1000)
     nx.draw_networkx_labels(G, pos, {i: seq[i] for i in G.nodes()}, font_color="black")
     plt.title("RNA simplified graph")

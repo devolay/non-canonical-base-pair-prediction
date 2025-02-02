@@ -26,7 +26,9 @@ def one_hot_edges(edges_matrix: np.ndarray, num_classes: int = 15) -> np.ndarray
     """
     One-hot encodes the edges between nodes in a graph.
     """
-    one_hot_matrix = np.zeros((edges_matrix.shape[0], edges_matrix.shape[1], num_classes), dtype=np.float32)
+    one_hot_matrix = np.zeros(
+        (edges_matrix.shape[0], edges_matrix.shape[1], num_classes), dtype=np.float32
+    )
     for edge_class in range(num_classes):
         one_hot_matrix[edges_matrix == edge_class, edge_class] = 1
     return one_hot_matrix
@@ -47,10 +49,12 @@ def create_rna_graph(seq: str, pairings_matrix: np.ndarray, simple: bool = True)
     bond_matrix = get_phosphodiester_bonds_matrix(seq)
 
     if simple:
-        pairings_matrix[pairings_matrix == 1] = 2 # Canonical base pairs
-        pairings_matrix[pairings_matrix > 1] = 3 # Non-canonical base pairs
+        pairings_matrix[pairings_matrix == 1] = 2  # Canonical base pairs
+        pairings_matrix[pairings_matrix > 1] = 3  # Non-canonical base pairs
     else:
-        pairings_matrix[pairings_matrix > 0] += 1 # Canonical base pairs and non-canonical base pairs (with different classes)
+        pairings_matrix[
+            pairings_matrix > 0
+        ] += 1  # Canonical base pairs and non-canonical base pairs (with different classes)
 
     edges_matrix = bond_matrix + pairings_matrix
     edges_features = one_hot_edges(edges_matrix)
@@ -60,9 +64,9 @@ def create_rna_graph(seq: str, pairings_matrix: np.ndarray, simple: bool = True)
             features = edges_features[i, j]
             match edge_type:
                 case 1:
-                    G.add_edge(i, j, features=features, edge_type='phosphodiester')
+                    G.add_edge(i, j, features=features, edge_type="phosphodiester")
                 case 2:
-                    G.add_edge(i, j, features=features, edge_type='canonical')
+                    G.add_edge(i, j, features=features, edge_type="canonical")
                 case edge_type if edge_type > 2:
-                    G.add_edge(i, j, features=features, edge_type='non-canonical')
+                    G.add_edge(i, j, features=features, edge_type="non-canonical")
     return G
