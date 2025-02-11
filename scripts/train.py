@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import pytorch_lightning as pl
 from torch_geometric.data import DataLoader
 from pytorch_lightning.loggers import NeptuneLogger
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from pair_prediction.data.dataset import LinkPredictionDataset
 from pair_prediction.model.model import LitLinkPredictor
@@ -30,14 +31,28 @@ def parse_args():
 
 
 def main(args):
-    dataset = LinkPredictionDataset(idx_dir=IDX_DIR, matrix_dir=MATRIX_DIR)
+    train_dataset = LinkPredictionDataset(idx_dir=IDX_DIR, matrix_dir=MATRIX_DIR, validation=False)
+    val_dataset = LinkPredictionDataset(idx_dir=IDX_DIR, matrix_dir=MATRIX_DIR, validation=True)
 
-    train_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
 
     model = LitLinkPredictor(in_channels=4, hidden_channels=64, num_layers=2, dropout=0.3, lr=1e-3)
 
-    trainer = pl.Trainer(max_epochs=args.epochs, log_every_n_steps=10, accelerator="cpu")
+    checkpoint_callback = ModelCheckpoint(
+        monitor="val_loss",
+        filename="checkpoint-{epoch:02d}-{val_loss:.2f}",
+        save_top_k=1,
+        mode="min",
+        save_weights_only=True,
+    )
+
+    trainer = pl.Trainer(
+        max_epochs=args.epochs,
+        log_every_n_steps=10,
+        accelerator="cpu",
+        callbacks=[checkpoint_callback],
+    )
 
     if args.log_neptune:
         neptune_logger = NeptuneLogger(
