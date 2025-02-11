@@ -12,10 +12,15 @@ from pair_prediction.data.read import read_idx_file, read_matrix_file
 
 
 class LinkPredictionDataset(Dataset):
-    def __init__(self, idx_dir: Path, matrix_dir: Path):
+    def __init__(self, idx_dir: Path, matrix_dir: Path, validation: bool = False):
         self.idx_dir = idx_dir
         self.matrix_dir = matrix_dir
         self.file_names = [idx_file.stem for idx_file in self.idx_dir.glob("*.idx")]
+        
+        if validation:
+            self.file_names = self.file_names[: len(self.file_names) // 10]
+        else:
+            self.file_names = self.file_names[len(self.file_names) // 10 :]
 
     def __len__(self):
         return len(self.file_names)
