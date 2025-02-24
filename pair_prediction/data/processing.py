@@ -47,14 +47,7 @@ def create_rna_graph(seq: str, pairings_matrix: np.ndarray, simple: bool = True)
         G.add_node(i, features=nodes_features[i])
 
     bond_matrix = get_phosphodiester_bonds_matrix(seq)
-
-    if simple:
-        pairings_matrix[pairings_matrix == 1] = 2  # Canonical base pairs
-        pairings_matrix[pairings_matrix > 1] = 3  # Non-canonical base pairs
-    else:
-        pairings_matrix[
-            pairings_matrix > 0
-        ] += 1  # Canonical base pairs and non-canonical base pairs (with different classes)
+    pairings_matrix[pairings_matrix > 0] += 1
 
     edges_matrix = bond_matrix + pairings_matrix
     edges_features = one_hot_edges(edges_matrix)
