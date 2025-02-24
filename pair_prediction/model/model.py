@@ -45,7 +45,9 @@ class LinkPredictorModel(nn.Module):
             x = F.dropout(x, p=self.dropout, training=self.training)
         return x
 
-    def compute_edge_logits(self, node_embeddings: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+    def compute_edge_logits(
+        self, node_embeddings: torch.Tensor, edge_index: torch.Tensor
+    ) -> torch.Tensor:
         """
         Compute logits for edges using node embeddings and an edge index tensor.
         """

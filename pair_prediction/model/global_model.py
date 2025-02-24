@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from torch_geometric.utils import to_dense_batch
 
+
 class LinkPredictorGlobalModel(nn.Module):
     def __init__(
         self,
@@ -29,7 +30,7 @@ class LinkPredictorGlobalModel(nn.Module):
             self.convs.append(GCNConv(hidden_channels, hidden_channels))
 
         self.cnn_encoder = nn.Sequential(
-            nn.Conv1d(in_channels, hidden_channels , kernel_size=3, padding=1),
+            nn.Conv1d(in_channels, hidden_channels, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.MaxPool1d(kernel_size=2),
             nn.Conv1d(hidden_channels, hidden_channels, kernel_size=3, padding=1),
@@ -46,12 +47,12 @@ class LinkPredictorGlobalModel(nn.Module):
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor):
         """
         Compute node embeddings using GCN layers and global representations using the CNN encoder.
-        
+
         Args:
             x (torch.Tensor): Node feature matrix of shape [total_nodes, in_channels].
             edge_index (torch.Tensor): Graph connectivity.
             batch (torch.Tensor): Batch vector assigning each node to a graph.
-            
+
         Returns:
             node_embeddings (torch.Tensor): Local node embeddings.
             global_reps (torch.Tensor): Global representation for each graph in the batch.
@@ -63,29 +64,29 @@ class LinkPredictorGlobalModel(nn.Module):
             node_embeddings = F.relu(node_embeddings)
             node_embeddings = F.dropout(node_embeddings, p=self.dropout, training=self.training)
 
-        x_dense, mask = to_dense_batch(x, batch)  
+        x_dense, mask = to_dense_batch(x, batch)
         x_dense = x_dense.transpose(1, 2)
         global_reps = self.cnn_encoder(x_dense).squeeze(-1)
 
         return node_embeddings, global_reps
 
     def compute_edge_logits(
-        self, 
-        node_embeddings: torch.Tensor, 
-        edge_index: torch.Tensor, 
+        self,
+        node_embeddings: torch.Tensor,
+        edge_index: torch.Tensor,
         global_reps: torch.Tensor,
-        batch: torch.Tensor
+        batch: torch.Tensor,
     ) -> torch.Tensor:
         """
         Compute logits for edges by concatenating local node embeddings (src & dst)
         with the corresponding global representation.
-        
+
         Args:
             node_embeddings (torch.Tensor): Node embeddings [total_nodes, hidden_channels].
             edge_index (torch.Tensor): Tensor of edge indices.
             global_reps (torch.Tensor): Global representations [batch_size, hidden_channels].
             batch (torch.Tensor): Batch vector assigning each node to a graph.
-            
+
         Returns:
             logits (torch.Tensor): Logits for each edge.
         """
