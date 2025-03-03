@@ -5,69 +5,81 @@ import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from torch_geometric.utils import to_dense_batch
 
+from pair_prediction.model.residual_block import ResidualBlock1d
+
 
 class LinkPredictorGlobalModel(nn.Module):
     def __init__(
         self,
         in_channels: int = 4,
-        hidden_channels: int = 64,
-        num_layers: int = 2,
+        gnn_channels: list = [64, 64],
+        cnn_channels: list = [64, 64],
         dropout: float = 0.0,
     ):
         """
         Args:
             in_channels (int): Number of input node features.
-            hidden_channels (int): Hidden layer size.
-            num_layers (int): Number of GCN layers.
+            gnn_channels (list of int): Hidden channel sizes for the GNN encoder layers.
+                For example, [64, 64] creates a GNN with two layers:
+                - First layer: input in_channels, output 64.
+                - Second layer: input 64, output 64.
+            cnn_channels (list of int): Hidden channel sizes for the CNN encoder layers.
+                For example, [64, 64] creates a CNN with two residual blocks:
+                - First block: input in_channels, output 64.
+                - Second block: input 64, output 64.
             dropout (float): Dropout probability.
         """
         super().__init__()
         self.dropout = dropout
 
-        self.convs = nn.ModuleList()
-        self.convs.append(GCNConv(in_channels, hidden_channels))
-        for _ in range(num_layers - 1):
-            self.convs.append(GCNConv(hidden_channels, hidden_channels))
+        self.gnn_convs = nn.ModuleList()
+        self.gnn_convs.append(GCNConv(in_channels, gnn_channels[0]))
+        for i in range(1, len(gnn_channels)):
+            self.gnn_convs.append(GCNConv(gnn_channels[i-1], gnn_channels[i]))
 
-        self.cnn_encoder = nn.Sequential(
-            nn.Conv1d(in_channels, hidden_channels, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool1d(kernel_size=2),
-            nn.Conv1d(hidden_channels, hidden_channels, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.AdaptiveMaxPool1d(1),
-        )
+        cnn_blocks = []
+        cnn_blocks.append(ResidualBlock1d(in_channels, cnn_channels[0]))
+        for i in range(1, len(cnn_channels)):
+            cnn_blocks.append(ResidualBlock1d(cnn_channels[i-1], cnn_channels[i]))
+        self.cnn_encoder = nn.Sequential(*cnn_blocks)
 
+        predictor_in_dim = 2 * gnn_channels[-1] + cnn_channels[-1]
         self.link_predictor = nn.Sequential(
-            nn.Linear(3 * hidden_channels, hidden_channels),
+            nn.Linear(predictor_in_dim, gnn_channels[-1]),
             nn.ReLU(),
-            nn.Linear(hidden_channels, 1),
+            nn.Linear(gnn_channels[-1], 1)
         )
 
     def forward(self, x: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor):
         """
-        Compute node embeddings using GCN layers and global representations using the CNN encoder.
-
+        Forward pass:
+          - Computes node embeddings with the GNN encoder.
+          - Computes a global graph representation with the CNN encoder.
+          
         Args:
             x (torch.Tensor): Node feature matrix of shape [total_nodes, in_channels].
-            edge_index (torch.Tensor): Graph connectivity.
-            batch (torch.Tensor): Batch vector assigning each node to a graph.
-
+            edge_index (torch.Tensor): Graph connectivity information.
+            batch (torch.Tensor): Batch vector that assigns each node to a graph.
+            
         Returns:
-            node_embeddings (torch.Tensor): Local node embeddings.
-            global_reps (torch.Tensor): Global representation for each graph in the batch.
-            batch (torch.Tensor): The original batch vector (passed along for edge-level processing).
+            node_embeddings (torch.Tensor): Output from GNN encoder.
+            global_reps (torch.Tensor): Global representations from CNN encoder.
         """
         node_embeddings = x
-        for conv in self.convs:
+        for conv in self.gnn_convs:
             node_embeddings = conv(node_embeddings, edge_index)
             node_embeddings = F.relu(node_embeddings)
             node_embeddings = F.dropout(node_embeddings, p=self.dropout, training=self.training)
-
+        
+        # CNN encoder: create a dense batch for the global graph representation.
+        # x_dense shape: [B, N, in_channels] where N is the maximum number of nodes per graph.
         x_dense, mask = to_dense_batch(x, batch)
+        # Transpose to [B, in_channels, N] for Conv1d input.
         x_dense = x_dense.transpose(1, 2)
-        global_reps = self.cnn_encoder(x_dense).squeeze(-1)
-
+        features = self.cnn_encoder(x_dense)
+        # Aggregate over the node dimension (e.g., using mean pooling).
+        global_reps = features.mean(dim=2)  # shape: [B, cnn_channels[-1]]
+        
         return node_embeddings, global_reps
 
     def compute_edge_logits(

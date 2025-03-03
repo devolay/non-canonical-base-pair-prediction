@@ -9,5 +9,6 @@ networkx
 torch
 torch_geometric
 lightning
-neptune-client
+neptune
+scikit-learn
 -e .

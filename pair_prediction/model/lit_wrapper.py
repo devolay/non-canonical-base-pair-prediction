@@ -4,7 +4,6 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 
-from torch_geometric.utils import batched_negative_sampling
 from sklearn.metrics import (
     confusion_matrix,
     roc_curve,
@@ -16,19 +15,12 @@ from sklearn.metrics import (
 
 from pair_prediction.model.model import LinkPredictorModel
 from pair_prediction.model.global_model import LinkPredictorGlobalModel
-from pair_prediction.model.utils import prepare_val_negative_edges
+from pair_prediction.model.utils import get_negative_edges
+from pair_prediction.config import ModelConfig
 
 
 class LitWrapper(pl.LightningModule):
-    def __init__(
-        self,
-        in_channels: int,
-        hidden_channels: int = 64,
-        num_layers: int = 2,
-        dropout: float = 0.3,
-        lr: float = 1e-3,
-        model_type: str = "local",
-    ):
+    def __init__(self, config = ModelConfig):
         """
         LightningModule that wraps the LinkPredictorModel.
 
@@ -40,62 +32,58 @@ class LitWrapper(pl.LightningModule):
             lr (float): Learning rate.
         """
         super().__init__()
-        self.save_hyperparameters()
-        self.lr = lr
-        self.model_type = model_type
+        self.save_hyperparameters(config.__dict__)
+        self.lr = config.lr
+        self.model_type = config.model_type
+        self.negative_sample_ratio = config.negative_sample_ratio
 
-        if model_type == "local":
-            self.model = LinkPredictorModel(in_channels, hidden_channels, num_layers, dropout)
-        elif model_type == "global":
+        if self.model_type == "local":
+            self.model = LinkPredictorModel(
+                in_channels=config.in_channels,
+                hidden_channels=config.gnn_channels[0],
+                num_layers=len(config.gnn_channels),
+                dropout=config.dropout
+            )
+        elif self.model_type == "global":
+            if config.cnn_channels is None:
+                raise ValueError("cnn_channels must be provided for global models.")
             self.model = LinkPredictorGlobalModel(
-                in_channels, hidden_channels, num_layers, dropout
+                in_channels=config.in_channels,
+                gnn_channels=config.gnn_channels,
+                cnn_channels=config.cnn_channels,
+                dropout=config.dropout
             )
         else:
-            raise ValueError(f"Unknown model type: {model_type}")
-
+            raise ValueError(f"Unknown model type: {self.model_type}")
         self.val_outputs = []
-
-    def forward(self, data):
-        """
-        Forward pass using the underlying LinkPredictorModel.
-        """
-        return self.model(data)
 
     def training_step(self, batch, batch_idx):
         """
         Training step computing loss for link prediction.
         """
         edge_mask = np.concatenate(batch.edge_type)
-        edge_mask = edge_mask == "non-canonical"
+        edge_mask = edge_mask == 'non-canonical'
 
         message_passing_edge_index = batch.edge_index[:, ~edge_mask]
 
         if self.model_type == "global":
-            node_embeddings, global_representation = self.model(
-                batch.features, message_passing_edge_index, batch.batch
-            )
+            node_embeddings, global_representation = self.model(batch.features, message_passing_edge_index, batch.batch)
         else:
             node_embeddings = self.model(batch.features, message_passing_edge_index)
 
         pos_edge_index = batch.edge_index[:, edge_mask]
 
         if self.model_type == "global":
-            pos_logits = self.model.compute_edge_logits(
-                node_embeddings, pos_edge_index, global_representation, batch.batch
-            )
+            pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, global_representation, batch.batch)
         else:
             pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index)
 
         pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
 
-        num_neg_samples = pos_edge_index.size(1) // (len(batch.ptr) - 1)
-        neg_edge_index = batched_negative_sampling(
-            batch.edge_index, batch=batch.batch, num_neg_samples=num_neg_samples
-        )
+        neg_edge_index = get_negative_edges(batch, sample_ratio=self.negative_sample_ratio)
+        
         if self.model_type == "global":
-            neg_logits = self.model.compute_edge_logits(
-                node_embeddings, neg_edge_index, global_representation, batch.batch
-            )
+            neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, global_representation, batch.batch)
         else:
             neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index)
 
@@ -114,51 +102,43 @@ class LitWrapper(pl.LightningModule):
         labels, and probabilities for logging.
         """
         edge_mask = np.concatenate(batch.edge_type)
-        edge_mask = edge_mask == "non-canonical"
-
+        edge_mask = edge_mask == 'non-canonical'
+        
         message_passing_edge_index = batch.edge_index[:, ~edge_mask]
         if self.model_type == "global":
-            node_embeddings, global_representation = self.model(
-                batch.features, message_passing_edge_index, batch.batch
-            )
+            node_embeddings, global_representation = self.model(batch.features, message_passing_edge_index, batch.batch)
         else:
             node_embeddings = self.model(batch.features, message_passing_edge_index)
 
         pos_edge_index = batch.edge_index[:, edge_mask]
         if self.model_type == "global":
-            pos_logits = self.model.compute_edge_logits(
-                node_embeddings, pos_edge_index, global_representation, batch.batch
-            )
+            pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, global_representation, batch.batch)
         else:
             pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index)
         pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
 
-        neg_edge_index = prepare_val_negative_edges(batch)
+        neg_edge_index = get_negative_edges(batch)
         if self.model_type == "global":
-            neg_logits = self.model.compute_edge_logits(
-                node_embeddings, neg_edge_index, global_representation, batch.batch
-            )
+            neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, global_representation, batch.batch)
         else:
             neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index)
         neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
-
+        
         all_logits = torch.cat([pos_logits, neg_logits], dim=0)
         all_labels = torch.cat([pos_labels, neg_labels], dim=0)
 
         loss = F.binary_cross_entropy_with_logits(all_logits, all_labels)
         self.log("val_loss", loss, prog_bar=True, logger=True)
-
+        
         probabilities = torch.sigmoid(all_logits)
         preds = (probabilities > 0.5).long()
         labels = all_labels.long()
 
-        self.val_outputs.append(
-            {
-                "preds": preds.detach(),
-                "labels": labels.detach(),
-                "probabilities": probabilities.detach(),
-            }
-        )
+        self.val_outputs.append({
+            "preds": preds.detach(),
+            "labels": labels.detach(),
+            "probabilities": probabilities.detach()
+        })
         return loss
 
     def on_validation_epoch_end(self):
@@ -168,7 +148,7 @@ class LitWrapper(pl.LightningModule):
 
         self._log_validation(all_preds, all_labels, all_probabilities)
         self.val_outputs.clear()
-
+        
     def _log_validation(self, preds, labels, probabilities):
         """
         Logs the confusion matrix, ROC curve (with AUC), and probability distribution plots.
@@ -177,18 +157,18 @@ class LitWrapper(pl.LightningModule):
         preds_np = preds.cpu().numpy()
         labels_np = labels.cpu().numpy()
         prob_np = probabilities.cpu().numpy()
-
+        
         # Confusion Matrix.
         fig_cm, ax_cm = plt.subplots()
         cm = confusion_matrix(labels_np, preds_np)
-        cax = ax_cm.matshow(cm, cmap="Blues")
+        cax = ax_cm.matshow(cm, cmap='Blues')
         fig_cm.colorbar(cax)
-        ax_cm.set_xlabel("Predicted")
-        ax_cm.set_ylabel("True")
-        ax_cm.set_title("Confusion Matrix")
+        ax_cm.set_xlabel('Predicted')
+        ax_cm.set_ylabel('True')
+        ax_cm.set_title('Confusion Matrix')
         for (i, j), z in np.ndenumerate(cm):
-            ax_cm.text(j, i, f"{z}", ha="center", va="center")
-
+            ax_cm.text(j, i, f"{z}", ha='center', va='center')
+        
         # ROC Curve and AUC.
         fpr, tpr, _ = roc_curve(labels_np, prob_np)
         roc_auc = auc(fpr, tpr)
@@ -201,7 +181,7 @@ class LitWrapper(pl.LightningModule):
         ax_roc.set_ylabel("True Positive Rate")
         ax_roc.set_title("ROC Curve")
         ax_roc.legend(loc="lower right")
-
+        
         # Probability Distribution.
         fig_hist, ax_hist = plt.subplots()
         pos_probs = prob_np[labels_np == 1]
@@ -213,18 +193,18 @@ class LitWrapper(pl.LightningModule):
         ax_hist.set_yscale("log")
         ax_hist.set_title("Probability Distribution")
         ax_hist.legend()
-
+        
         self.logger.experiment["val_confusion_matrix"].append(fig_cm)
         self.logger.experiment["val_roc_curve"].append(fig_roc)
         self.logger.experiment["val_probs_distribution"].append(fig_hist)
-
+        
         precision = precision_score(labels_np, preds_np, zero_division=0)
         recall = recall_score(labels_np, preds_np, zero_division=0)
         f1 = f1_score(labels_np, preds_np, zero_division=0)
         self.log("val_precision", precision, prog_bar=True)
         self.log("val_recall", recall, prog_bar=True)
         self.log("val_f1", f1, prog_bar=True)
-
+        
         plt.close(fig_cm)
         plt.close(fig_roc)
         plt.close(fig_hist)
