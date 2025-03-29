@@ -40,6 +40,14 @@ def create_rna_graph(seq: str, pairings_matrix: np.ndarray, simple: bool = True)
 
     The sequence is used to label each node in the graph.
     The edge matrix is used to determine the edges between nodes.
+
+    Args:
+        seq (str): RNA sequence
+        pairings_matrix (np.ndarray): Matrix containing pair information where:
+            - 0: no pair
+            - 1: canonical pair
+            - >1: non-canonical pair (number indicates the specific type)
+        simple (bool): If True, simplifies edge types to just "canonical" and "non-canonical"
     """
     G = nx.Graph()
     nodes_features = one_hot_encode_sequence(seq)
@@ -57,9 +65,9 @@ def create_rna_graph(seq: str, pairings_matrix: np.ndarray, simple: bool = True)
             features = edges_features[i, j]
             match edge_type:
                 case 1:
-                    G.add_edge(i, j, features=features, edge_type="phosphodiester")
+                    G.add_edge(i, j, features=features, edge_type="phosphodiester", pair_type=0)
                 case 2:
-                    G.add_edge(i, j, features=features, edge_type="canonical")
+                    G.add_edge(i, j, features=features, edge_type="canonical", pair_type=1)
                 case edge_type if edge_type > 2:
-                    G.add_edge(i, j, features=features, edge_type="non-canonical")
+                    G.add_edge(i, j, features=features, edge_type="non-canonical", pair_type=edge_type-1)
     return G

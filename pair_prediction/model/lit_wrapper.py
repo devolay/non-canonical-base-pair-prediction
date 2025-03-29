@@ -14,10 +14,16 @@ from sklearn.metrics import (
 )
 
 from pair_prediction.model.model import LinkPredictorModel
-from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
+# from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
 from pair_prediction.model.global_model import LinkPredictorGlobalModel
 from pair_prediction.model.utils import get_negative_edges
 from pair_prediction.config import ModelConfig
+from pair_prediction.visualization.metrics import (
+    plot_confusion_matrix,
+    plot_roc_curve,
+    plot_probability_distribution,
+    plot_non_canonical_pair_accuracy,
+)
 
 from rinalmo.data.alphabet import Alphabet
 
@@ -71,49 +77,76 @@ class LitWrapper(pl.LightningModule):
             raise ValueError(f"Unknown model type: {self.model_type}")
         self.val_outputs = []
 
-    def training_step(self, batch, batch_idx):
-        """
-        Training step computing loss for link prediction.
-        """
+    def _common_step(self, batch, negative_sample_ratio = None):
+        if self.model_type == "global":
+            all_logits, all_labels = self._global_model_step(batch, negative_sample_ratio)
+        elif self.model_type == "rinalmo":
+            all_logits, all_labels = self._rinalmo_step(batch, negative_sample_ratio)
+        else:
+            all_logits, all_labels = self._local_model_step(batch, negative_sample_ratio)
+        return all_logits, all_labels
+
+    def _global_model_step(self, batch, negative_sample_ratio: int):
         edge_mask = np.concatenate(batch.edge_type)
         edge_mask = edge_mask == 'non-canonical'
-
         message_passing_edge_index = batch.edge_index[:, ~edge_mask]
-
-        if self.model_type == "global":
-            node_embeddings, global_representation = self.model(batch.features, message_passing_edge_index, batch.batch)
-        elif self.model_type == "rinalmo":
-            rna_tokens = torch.tensor(self.tokenizer.batch_tokenize(batch.seq),device=self.device)
-            with torch.cuda.amp.autocast():
-                node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index, batch.batch)
-        else:
-            node_embeddings = self.model(batch.features, message_passing_edge_index)
+        node_embeddings, global_representation = self.model(batch.features, message_passing_edge_index, batch.batch)
 
         pos_edge_index = batch.edge_index[:, edge_mask]
-
-        if self.model_type == "global":
-            pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, global_representation, batch.batch)
-        elif self.model_type == "rinalmo":
-            pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, batch.batch)
-        else:
-            pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index)
-
+        pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, global_representation, batch.batch)
         pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
 
-        neg_edge_index = get_negative_edges(batch, sample_ratio=self.negative_sample_ratio)
-        
-        if self.model_type == "global":
-            neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, global_representation, batch.batch)
-        elif self.model_type == "rinalmo":
-            neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, batch.batch)
-        else:
-            neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index)
-
+        neg_edge_index = get_negative_edges(batch, sample_ratio=negative_sample_ratio)
+        neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, global_representation, batch.batch)
         neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
 
         all_logits = torch.cat([pos_logits, neg_logits], dim=0)
         all_labels = torch.cat([pos_labels, neg_labels], dim=0)
+        return all_logits, all_labels
+    
+    def _rinalmo_step(self, batch, negative_sample_ratio):
+        edge_mask = np.concatenate(batch.edge_type)
+        edge_mask = edge_mask == 'non-canonical'
+        message_passing_edge_index = batch.edge_index[:, ~edge_mask]
+        rna_tokens = torch.tensor(self.tokenizer.batch_tokenize(batch.seq),device=self.device)
+        with torch.cuda.amp.autocast():
+            node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index, batch.batch)
 
+        pos_edge_index = batch.edge_index[:, edge_mask]
+        pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, batch.batch)
+        pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
+
+        neg_edge_index = get_negative_edges(batch, sample_ratio=negative_sample_ratio)
+        neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, batch.batch)
+        neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
+
+        all_logits = torch.cat([pos_logits, neg_logits], dim=0)
+        all_labels = torch.cat([pos_labels, neg_labels], dim=0)
+        return all_logits, all_labels
+    
+    def _local_model_step(self, batch, negative_sample_ratio):
+        edge_mask = np.concatenate(batch.edge_type)
+        edge_mask = edge_mask == 'non-canonical'
+        message_passing_edge_index = batch.edge_index[:, ~edge_mask]
+        node_embeddings = self.model(batch.features, message_passing_edge_index)
+
+        pos_edge_index = batch.edge_index[:, edge_mask]
+        pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index)
+        pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
+
+        neg_edge_index = get_negative_edges(batch, sample_ratio=negative_sample_ratio)
+        neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index)
+        neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
+
+        all_logits = torch.cat([pos_logits, neg_logits], dim=0)
+        all_labels = torch.cat([pos_labels, neg_labels], dim=0)
+        return all_logits, all_labels
+
+    def training_step(self, batch, batch_idx):
+        """
+        Training step computing loss for link prediction.
+        """
+        all_logits, all_labels = self._common_step(batch, self.negative_sample_ratio)
         loss = F.binary_cross_entropy_with_logits(all_logits, all_labels)
         self.log("train_loss", loss, prog_bar=True, logger=True)
         return loss
@@ -123,121 +156,73 @@ class LitWrapper(pl.LightningModule):
         Validation step computing loss, accuracy, and collects predictions,
         labels, and probabilities for logging.
         """
-        edge_mask = np.concatenate(batch.edge_type)
-        edge_mask = edge_mask == 'non-canonical'
-        
-        message_passing_edge_index = batch.edge_index[:, ~edge_mask]
-        if self.model_type == "global":
-            node_embeddings, global_representation = self.model(batch.features, message_passing_edge_index, batch.batch)
-        elif self.model_type == "rinalmo":
-            rna_tokens = torch.tensor(self.tokenizer.batch_tokenize(batch.seq),device=self.device)
-            with torch.cuda.amp.autocast():
-                node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index, batch.batch)
-        else:
-            node_embeddings = self.model(batch.features, message_passing_edge_index)
-
-        pos_edge_index = batch.edge_index[:, edge_mask]
-        if self.model_type == "global":
-            pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, global_representation, batch.batch)
-        elif self.model_type == "rinalmo":
-            pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, batch.batch)
-        else:
-            pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index)
-        pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
-
-        neg_edge_index = get_negative_edges(batch)
-        if self.model_type == "global":
-            neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, global_representation, batch.batch)
-        elif self.model_type == "rinalmo":
-            neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, batch.batch)
-        else:
-            neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index)
-        neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
-        
-        all_logits = torch.cat([pos_logits, neg_logits], dim=0)
-        all_labels = torch.cat([pos_labels, neg_labels], dim=0)
+        all_logits, all_labels = self._common_step(batch)
 
         loss = F.binary_cross_entropy_with_logits(all_logits, all_labels)
         self.log("val_loss", loss, prog_bar=True, logger=True)
         
         probabilities = torch.sigmoid(all_logits)
-        preds = (probabilities > 0.5).long()
-        labels = all_labels.long()
+        preds = (probabilities > 0.5)
 
-        self.val_outputs.append({
+        edge_types = np.concatenate(batch.edge_type)
+        pair_types = batch.pair_type
+    
+        self.val_outputs.append({ 
             "preds": preds.detach(),
-            "labels": labels.detach(),
-            "probabilities": probabilities.detach()
+            "labels": all_labels.detach(),
+            "probabilities": probabilities.detach(),
+            "edge_types": edge_types,
+            "pair_types": pair_types.detach()
         })
         return loss
+    
 
     def on_validation_epoch_end(self):
         all_preds = torch.cat([x["preds"] for x in self.val_outputs], dim=0)
         all_labels = torch.cat([x["labels"] for x in self.val_outputs], dim=0)
         all_probabilities = torch.cat([x["probabilities"] for x in self.val_outputs], dim=0)
-
-        self._log_validation(all_preds, all_labels, all_probabilities)
+        all_edge_types = np.concatenate([x["edge_types"] for x in self.val_outputs])
+        all_pair_types = torch.cat([x["pair_types"] for x in self.val_outputs], dim=0) 
+        
+        self._log_validation(
+            all_preds, all_labels, all_probabilities, 
+            all_edge_types, all_pair_types,
+        )
         self.val_outputs.clear()
         
-    def _log_validation(self, preds, labels, probabilities):
+    def _log_validation(self, preds, labels, probabilities, edge_types, pair_types):
         """
         Logs the confusion matrix, ROC curve (with AUC), and probability distribution plots.
         Uses Neptune logger's log_image method.
         """
-        preds_np = preds.cpu().numpy()
-        labels_np = labels.cpu().numpy()
-        prob_np = probabilities.cpu().numpy()
+        preds_np = preds.cpu().numpy().astype(np.float32)
+        labels_np = labels.cpu().numpy().astype(np.float32)
+        prob_np = probabilities.cpu().numpy().astype(np.float32)
         
-        # Confusion Matrix.
-        fig_cm, ax_cm = plt.subplots()
-        cm = confusion_matrix(labels_np, preds_np)
-        cax = ax_cm.matshow(cm, cmap='Blues')
-        fig_cm.colorbar(cax)
-        ax_cm.set_xlabel('Predicted')
-        ax_cm.set_ylabel('True')
-        ax_cm.set_title('Confusion Matrix')
-        for (i, j), z in np.ndenumerate(cm):
-            ax_cm.text(j, i, f"{z}", ha='center', va='center')
-        
-        # ROC Curve and AUC.
-        fpr, tpr, _ = roc_curve(labels_np, prob_np)
-        roc_auc = auc(fpr, tpr)
-        fig_roc, ax_roc = plt.subplots()
-        ax_roc.plot(fpr, tpr, label=f"ROC (AUC = {roc_auc:.2f})")
-        ax_roc.plot([0, 1], [0, 1], "k--")
-        ax_roc.set_xlim([0.0, 1.0])
-        ax_roc.set_ylim([0.0, 1.05])
-        ax_roc.set_xlabel("False Positive Rate")
-        ax_roc.set_ylabel("True Positive Rate")
-        ax_roc.set_title("ROC Curve")
-        ax_roc.legend(loc="lower right")
-        
-        # Probability Distribution.
-        fig_hist, ax_hist = plt.subplots()
-        pos_probs = prob_np[labels_np == 1]
-        neg_probs = prob_np[labels_np == 0]
-        ax_hist.hist(pos_probs, bins=20, alpha=0.7, label="Positive")
-        ax_hist.hist(neg_probs, bins=20, alpha=0.7, label="Negative")
-        ax_hist.set_xlabel("Predicted Probability")
-        ax_hist.set_ylabel("Count")
-        ax_hist.set_yscale("log")
-        ax_hist.set_title("Probability Distribution")
-        ax_hist.legend()
+        fig_cm, _ = plot_confusion_matrix(labels_np, preds_np)
+        fig_roc, _ = plot_roc_curve(labels_np, prob_np)
+        fig_hist, _ = plot_probability_distribution(labels_np, prob_np)
+        fig_pair_types, _ = plot_non_canonical_pair_accuracy(
+            preds_np, labels_np, edge_types, pair_types
+        )
         
         self.logger.experiment["val_confusion_matrix"].append(fig_cm)
         self.logger.experiment["val_roc_curve"].append(fig_roc)
         self.logger.experiment["val_probs_distribution"].append(fig_hist)
+        self.logger.experiment["val_pair_type_accuracy"].append(fig_pair_types)
         
+        plt.close(fig_cm)
+        plt.close(fig_roc)
+        plt.close(fig_hist)
+        plt.close(fig_pair_types)
+        
+        # Calculate and log metrics
         precision = precision_score(labels_np, preds_np, zero_division=0)
         recall = recall_score(labels_np, preds_np, zero_division=0)
         f1 = f1_score(labels_np, preds_np, zero_division=0)
         self.log("val_precision", precision, prog_bar=True)
         self.log("val_recall", recall, prog_bar=True)
         self.log("val_f1", f1, prog_bar=True)
-        
-        plt.close(fig_cm)
-        plt.close(fig_roc)
-        plt.close(fig_hist)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
