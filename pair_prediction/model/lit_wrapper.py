@@ -14,9 +14,12 @@ from sklearn.metrics import (
 )
 
 from pair_prediction.model.model import LinkPredictorModel
+from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
 from pair_prediction.model.global_model import LinkPredictorGlobalModel
 from pair_prediction.model.utils import get_negative_edges
 from pair_prediction.config import ModelConfig
+
+from rinalmo.data.alphabet import Alphabet
 
 
 class LitWrapper(pl.LightningModule):
@@ -53,6 +56,17 @@ class LitWrapper(pl.LightningModule):
                 cnn_channels=config.cnn_channels,
                 dropout=config.dropout
             )
+        elif self.model_type == "rinalmo":
+            self.model = RiNAlmoLinkPredictionModel(
+                in_channels=config.in_channels,
+                gnn_channels=config.gnn_channels,
+                dropout=config.dropout
+            )
+            self.model._load_pretrained_lm_weights(
+                "/home/inf141171/non-canonical-base-pair-prediction/models/rinalmo/rinalmo_giga_pretrained.pt",
+                freeze_lm=True
+            )
+            self.tokenizer = Alphabet()
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
         self.val_outputs = []
@@ -68,6 +82,10 @@ class LitWrapper(pl.LightningModule):
 
         if self.model_type == "global":
             node_embeddings, global_representation = self.model(batch.features, message_passing_edge_index, batch.batch)
+        elif self.model_type == "rinalmo":
+            rna_tokens = torch.tensor(self.tokenizer.batch_tokenize(batch.seq),device=self.device)
+            with torch.cuda.amp.autocast():
+                node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index, batch.batch)
         else:
             node_embeddings = self.model(batch.features, message_passing_edge_index)
 
@@ -75,6 +93,8 @@ class LitWrapper(pl.LightningModule):
 
         if self.model_type == "global":
             pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, global_representation, batch.batch)
+        elif self.model_type == "rinalmo":
+            pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, batch.batch)
         else:
             pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index)
 
@@ -84,6 +104,8 @@ class LitWrapper(pl.LightningModule):
         
         if self.model_type == "global":
             neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, global_representation, batch.batch)
+        elif self.model_type == "rinalmo":
+            neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, batch.batch)
         else:
             neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index)
 
@@ -107,12 +129,18 @@ class LitWrapper(pl.LightningModule):
         message_passing_edge_index = batch.edge_index[:, ~edge_mask]
         if self.model_type == "global":
             node_embeddings, global_representation = self.model(batch.features, message_passing_edge_index, batch.batch)
+        elif self.model_type == "rinalmo":
+            rna_tokens = torch.tensor(self.tokenizer.batch_tokenize(batch.seq),device=self.device)
+            with torch.cuda.amp.autocast():
+                node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index, batch.batch)
         else:
             node_embeddings = self.model(batch.features, message_passing_edge_index)
 
         pos_edge_index = batch.edge_index[:, edge_mask]
         if self.model_type == "global":
             pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, global_representation, batch.batch)
+        elif self.model_type == "rinalmo":
+            pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, batch.batch)
         else:
             pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index)
         pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
@@ -120,6 +148,8 @@ class LitWrapper(pl.LightningModule):
         neg_edge_index = get_negative_edges(batch)
         if self.model_type == "global":
             neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, global_representation, batch.batch)
+        elif self.model_type == "rinalmo":
+            neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, batch.batch)
         else:
             neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index)
         neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)

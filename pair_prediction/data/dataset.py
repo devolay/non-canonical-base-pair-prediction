@@ -53,8 +53,10 @@ class LinkPredictionDataset(InMemoryDataset):
 
             seq, details = read_idx_file(idx_file_path)
             amt_matrix = read_matrix_file(amt_file_path)
+
             graph = create_rna_graph(seq, amt_matrix)
             data = from_networkx(graph)
+            data.seq = seq
 
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
