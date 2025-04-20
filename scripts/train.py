@@ -14,7 +14,7 @@ from pair_prediction.config import ModelConfig
 
 load_dotenv()
 
-DATA_DIR = Path("/home/dstachowiak/non-canonical-base-pair-prediction/data/")
+DATA_DIR = Path("data/")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a link prediction model for RNA graphs.")
@@ -42,7 +42,7 @@ def main(args):
 
     early_stop_callback = EarlyStopping(
         monitor="val_loss",
-        patience=20,
+        patience=100,
         verbose=True,
         mode="min",
     )
@@ -59,7 +59,7 @@ def main(args):
             api_key=os.environ["NEPTUNE_API_TOKEN"],
             project=os.environ["NEPTUNE_PROJECT"],
             tags=["link-prediction", "rna"],
-            log_model_checkpoints=True,
+            log_model_checkpoints=False,
         )
         trainer.logger = neptune_logger
 

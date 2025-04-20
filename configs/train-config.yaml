@@ -1,19 +1,19 @@
-batch_size: 256
+batch_size: 512
 epochs: 500
-lr: 0.001
+lr: 0.00001
 log_neptune: True
-negative_sample_ratio: 4
+negative_sample_ratio: 8
 
-in_channels: 4
-model_type: global
+in_channels: 1280
+model_type: rinalmo
 gnn_channels:
-  - 128
+  - 1280
+  - 512
+  - 512
   - 256
-  - 128
-  - 64
 cnn_channels:
-  - 128
-  - 256
-  - 128
+  - 1280
+  - 1280
+  - 1280
   - 64
-dropout: 0.2
+dropout: 0.3

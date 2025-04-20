@@ -131,8 +131,8 @@ def plot_non_canonical_pair_accuracy(
     correct_counts = []
     for pair_type in unique_pair_types:
         type_mask = (pair_types == pair_type) & positive_non_canonical_mask
-        type_preds = predictions[:num_pos_edges][type_mask.bool()]
-        type_labels = labels[:num_pos_edges][type_mask.bool()]
+        type_preds = predictions[:num_pos_edges][type_mask.astype(bool)]
+        type_labels = labels[:num_pos_edges][type_mask.astype(bool)]
         correct_pred = np.sum(type_preds == type_labels)
         total_count = len(type_labels)
         accuracy = correct_pred / total_count if total_count > 0 else 0

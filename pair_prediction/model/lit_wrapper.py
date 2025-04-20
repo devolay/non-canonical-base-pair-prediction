@@ -14,7 +14,7 @@ from sklearn.metrics import (
 )
 
 from pair_prediction.model.model import LinkPredictorModel
-# from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
+from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
 from pair_prediction.model.global_model import LinkPredictorGlobalModel
 from pair_prediction.model.utils import get_negative_edges
 from pair_prediction.config import ModelConfig
@@ -70,7 +70,7 @@ class LitWrapper(pl.LightningModule):
             )
             self.model._load_pretrained_lm_weights(
                 "/home/inf141171/non-canonical-base-pair-prediction/models/rinalmo/rinalmo_giga_pretrained.pt",
-                freeze_lm=True
+                freeze_lm=False
             )
             self.tokenizer = Alphabet()
         else:
@@ -110,7 +110,7 @@ class LitWrapper(pl.LightningModule):
         message_passing_edge_index = batch.edge_index[:, ~edge_mask]
         rna_tokens = torch.tensor(self.tokenizer.batch_tokenize(batch.seq),device=self.device)
         with torch.cuda.amp.autocast():
-            node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index, batch.batch)
+            node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index)
 
         pos_edge_index = batch.edge_index[:, edge_mask]
         pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, batch.batch)
@@ -198,6 +198,7 @@ class LitWrapper(pl.LightningModule):
         preds_np = preds.cpu().numpy().astype(np.float32)
         labels_np = labels.cpu().numpy().astype(np.float32)
         prob_np = probabilities.cpu().numpy().astype(np.float32)
+        pair_types = pair_types.cpu().numpy().astype(np.float32)
         
         fig_cm, _ = plot_confusion_matrix(labels_np, preds_np)
         fig_roc, _ = plot_roc_curve(labels_np, prob_np)

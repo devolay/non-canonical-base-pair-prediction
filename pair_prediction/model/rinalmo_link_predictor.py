@@ -18,6 +18,7 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         self,
         in_channels: int = 4,
         gnn_channels: list = [64, 64],
+        gnn_attention_heads: int = 4,
         cnn_head_embed_dim: int = 64,
         cnn_head_num_blocks: int = 2,
         dropout: float = 0.0,
@@ -41,9 +42,9 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         self.rinalmo = RiNALMo(model_config("giga"))
 
         self.gnn_convs = nn.ModuleList()
-        self.gnn_convs.append(GATv2Conv(in_channels, gnn_channels[0]))
+        self.gnn_convs.append(GATv2Conv(in_channels, int(gnn_channels[0] / gnn_attention_heads), residual=True, heads=gnn_attention_heads))
         for i in range(1, len(gnn_channels)):
-            self.gnn_convs.append(GATv2Conv(gnn_channels[i-1], gnn_channels[i]))
+            self.gnn_convs.append(GATv2Conv(gnn_channels[i-1], int(gnn_channels[i] / gnn_attention_heads), residual=True, heads=gnn_attention_heads))
 
         self.prediction_head = SecStructPredictionHead(
             embed_dim=gnn_channels[-1],
@@ -61,7 +62,7 @@ class RiNAlmoLinkPredictionModel(nn.Module):
             for param in self.rinalmo.parameters():
                 param.requires_grad = False
         
-    def forward(self, x: torch.Tensor, tokens: torch.Tensor, edge_index: torch.Tensor, batch: torch.Tensor):
+    def forward(self, x: torch.Tensor, tokens: torch.Tensor, edge_index: torch.Tensor):
         """
         Forward pass:
           - Computes node embeddings with the GNN encoder.
@@ -82,6 +83,7 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         
         node_embeddings[pad_mask, :] = 0.
         node_embeddings = node_embeddings[nucleotide_mask & ~pad_mask]
+
         for conv in self.gnn_convs:
             node_embeddings = conv(node_embeddings, edge_index)
             node_embeddings = F.relu(node_embeddings)
@@ -110,9 +112,6 @@ class RiNAlmoLinkPredictionModel(nn.Module):
             logits (torch.Tensor): Logits for each edge.
         """
         x_dense, _ = to_dense_batch(node_embeddings, batch)
-    
         logits = self.prediction_head(x_dense)
-
         edges_dense = to_dense_adj(edge_index, batch)
-
         return logits[edges_dense.bool()]

@@ -57,6 +57,7 @@ class LinkPredictionDataset(InMemoryDataset):
             graph = create_rna_graph(seq, amt_matrix)
             data = from_networkx(graph)
             data.seq = seq
+            data.id = file_stem
 
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
