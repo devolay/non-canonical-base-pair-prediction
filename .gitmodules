@@ -1,0 +1,3 @@
+[submodule "external/RiNALMo"]
+	path = external/RiNALMo
+	url = https://github.com/lbcb-sci/RiNALMo.git
