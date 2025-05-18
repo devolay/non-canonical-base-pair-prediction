@@ -1,3 +1,6 @@
 [submodule "external/RiNALMo"]
 	path = external/RiNALMo
 	url = https://github.com/lbcb-sci/RiNALMo.git
+[submodule "external/SPOT-RNA"]
+	path = external/SPOT-RNA
+	url = https://github.com/jaswindersingh2/SPOT-RNA.git
