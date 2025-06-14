@@ -70,7 +70,7 @@ class LitWrapper(pl.LightningModule):
             )
             self.model._load_pretrained_lm_weights(
                 "/home/inf141171/non-canonical-base-pair-prediction/models/rinalmo/rinalmo_giga_pretrained.pt",
-                freeze_lm=False
+                freeze_lm=config.freeze_embeddings
             )
             self.tokenizer = Alphabet()
         else:

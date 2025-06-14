@@ -9,6 +9,10 @@ class ModelConfig:
     lr: float = 1e-3
     log_neptune: bool = False
     negative_sample_ratio: int = 1
+    freeze_embeddings: bool = False
+
+    gradient_clip_value: float = 0.0
+    gradient_clip_algorithm: str = "norm"
     
     in_channels: int = 4
     model_type: str = "local"

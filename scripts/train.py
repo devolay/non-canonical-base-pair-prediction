@@ -24,8 +24,8 @@ def parse_args():
 def main(args):
     config = ModelConfig.from_yaml(args.config)
     
-    train_dataset = LinkPredictionDataset(root=DATA_DIR, validation=False)
-    val_dataset = LinkPredictionDataset(root=DATA_DIR, validation=True)
+    train_dataset = LinkPredictionDataset(root=DATA_DIR, mode="train")
+    val_dataset = LinkPredictionDataset(root=DATA_DIR, mode="validation")
     
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False, num_workers=4)
@@ -52,6 +52,8 @@ def main(args):
         log_every_n_steps=10,
         accelerator="gpu",
         callbacks=[checkpoint_callback, early_stop_callback],
+        gradient_clip_val=config.gradient_clip_value,
+        gradient_clip_algorithm=config.gradient_clip_algorithm,
     )
 
     if config.log_neptune:

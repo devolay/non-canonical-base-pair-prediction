@@ -3,7 +3,7 @@ import torch
 from typing import Optional
 from torch_geometric.data import Data
 
-def get_negative_edges(batched_data: Data, sample_ratio: Optional[int] = None, seed: int = 42, consider_multiplets: bool = False) -> torch.Tensor:
+def get_negative_edges(batched_data: Data, sample_ratio: Optional[int] = None, consider_multiplets: bool = False, validation: bool = False) -> torch.Tensor:
     """
     Given a batched Data object (from PyG's DataLoader) that contains:
       - batched_data.ptr: a tensor of shape [num_graphs+1] indicating node boundaries.
@@ -18,7 +18,9 @@ def get_negative_edges(batched_data: Data, sample_ratio: Optional[int] = None, s
     Returns:
         neg_edge_index: Tensor of shape [2, total_neg_edges] containing negative edge candidates.
     """
-    torch.manual_seed(seed)
+    if validation:
+        torch.manual_seed(42)
+
     neg_edges_list = []
     ptr = batched_data.ptr
     pos_edge_index = batched_data.edge_index

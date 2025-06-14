@@ -3,7 +3,7 @@ flake8
 isort
 pip
 python-dotenv
-numpy
+numpy==1.26.4
 matplotlib
 networkx
 torch
@@ -11,4 +11,5 @@ torch_geometric
 lightning
 neptune
 scikit-learn
+tensorflow==2.16.1
 -e .

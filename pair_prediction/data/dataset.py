@@ -11,7 +11,7 @@ from pair_prediction.data.read import read_idx_file, read_matrix_file
 
 class LinkPredictionDataset(InMemoryDataset):
     def __init__(
-        self, root, validation=False, transform=None, pre_transform=None, pre_filter=None
+        self, root, transform=None, pre_transform=None, pre_filter=None, mode: str = "train"
     ):
         """
         Dataset for RNA graph link prediction as an InMemoryDataset.
@@ -22,8 +22,14 @@ class LinkPredictionDataset(InMemoryDataset):
             validation (bool): If True, uses a smaller subset of the data.
             transform, pre_transform, pre_filter: Standard PyG arguments.
         """
-        self.validation = validation
-        self.prefix = "val" if validation else "train"
+        self.mode = mode
+        match mode:
+            case "train":
+                self.prefix = "train"
+            case "validation":
+                self.prefix = "val"
+            case _:
+                self.prefix = 'all'
         super().__init__(root, transform, pre_transform, pre_filter)
         self.load(self.processed_paths[0])
 
@@ -41,9 +47,9 @@ class LinkPredictionDataset(InMemoryDataset):
         data_list = []
         raw_idx_files = self.raw_file_names
 
-        if self.validation:
+        if self.mode == "validation":
             raw_idx_files = raw_idx_files[: len(raw_idx_files) // 10]
-        else:
+        elif self.mode == "train":
             raw_idx_files = raw_idx_files[len(raw_idx_files) // 10 :]
 
         for idx_file_name in tqdm(raw_idx_files, desc=f"Processing {self.prefix} data"):
