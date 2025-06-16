@@ -3,6 +3,7 @@ import numpy as np
 import torch.nn.functional as F
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
+import math
 
 from sklearn.metrics import (
     confusion_matrix,
@@ -12,6 +13,8 @@ from sklearn.metrics import (
     recall_score,
     f1_score,
 )
+from torch.optim.lr_scheduler import LambdaLR
+
 
 from pair_prediction.model.model import LinkPredictorModel
 from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
@@ -43,6 +46,8 @@ class LitWrapper(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters(config.__dict__)
         self.lr = config.lr
+        self.min_lr = config.min_lr
+
         self.model_type = config.model_type
         self.negative_sample_ratio = config.negative_sample_ratio
 
@@ -76,6 +81,23 @@ class LitWrapper(pl.LightningModule):
         else:
             raise ValueError(f"Unknown model type: {self.model_type}")
         self.val_outputs = []
+
+    @property
+    def num_training_steps(self) -> int:
+        """Total training steps inferred from datamodule and devices."""
+        if self.trainer.max_steps:
+            return self.trainer.max_steps
+
+        limit_batches = self.trainer.limit_train_batches
+        batches = len(self.train_dataloader())
+        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)     
+
+        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
+        if self.trainer.tpu_cores:
+            num_devices = max(num_devices, self.trainer.tpu_cores)
+
+        effective_accum = self.trainer.accumulate_grad_batches * num_devices
+        return (batches // effective_accum) * self.trainer.max_epochs
 
     def _common_step(self, batch, negative_sample_ratio = None):
         if self.model_type == "global":
@@ -172,10 +194,10 @@ class LitWrapper(pl.LightningModule):
             "labels": all_labels.detach(),
             "probabilities": probabilities.detach(),
             "edge_types": edge_types,
-            "pair_types": pair_types.detach()
+            "pair_types": pair_types.detach(),
+            "loss": loss.detach(),
         })
-        return loss
-    
+        return loss    
 
     def on_validation_epoch_end(self):
         all_preds = torch.cat([x["preds"] for x in self.val_outputs], dim=0)
@@ -188,6 +210,7 @@ class LitWrapper(pl.LightningModule):
             all_preds, all_labels, all_probabilities, 
             all_edge_types, all_pair_types,
         )
+        
         self.val_outputs.clear()
         
     def _log_validation(self, preds, labels, probabilities, edge_types, pair_types):
@@ -224,7 +247,21 @@ class LitWrapper(pl.LightningModule):
         self.log("val_precision", precision, prog_bar=True)
         self.log("val_recall", recall, prog_bar=True)
         self.log("val_f1", f1, prog_bar=True)
-
+    
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
-        return optimizer
+        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode='max',
+            factor=0.2,
+            patience=2,
+            min_lr=self.min_lr,
+            verbose=True
+        )
+
+        return {
+            "optimizer": self.optimizer, 
+            "lr_scheduler": self.scheduler, 
+            "monitor": "val_loss"
+        }
+    

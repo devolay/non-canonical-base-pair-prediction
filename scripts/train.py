@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 import pytorch_lightning as pl
 from torch_geometric.loader import DataLoader
 from lightning.pytorch.loggers import NeptuneLogger
-from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 
 from pair_prediction.data.dataset import LinkPredictionDataset
 from pair_prediction.model.lit_wrapper import LitWrapper
@@ -46,12 +47,13 @@ def main(args):
         verbose=True,
         mode="min",
     )
+    lr_monitor = LearningRateMonitor(logging_interval='step')
 
     trainer = pl.Trainer(
         max_epochs=config.epochs,
         log_every_n_steps=10,
         accelerator="gpu",
-        callbacks=[checkpoint_callback, early_stop_callback],
+        callbacks=[checkpoint_callback, early_stop_callback, lr_monitor],
         gradient_clip_val=config.gradient_clip_value,
         gradient_clip_algorithm=config.gradient_clip_algorithm,
     )

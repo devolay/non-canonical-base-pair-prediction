@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import pickle
 from tqdm import tqdm
 from pathlib import Path
 from typing import Any, List, Dict
@@ -14,26 +15,6 @@ from pair_prediction.data.dataset import LinkPredictionDataset
 from pair_prediction.model.utils import get_negative_edges
 from pair_prediction.evaluation.utils import rmtree
 from pair_prediction.constants import BASE_DIR
-
-
-def dotbracket_to_contacts(dot):
-    """Convert dot-bracket to contact matrix."""
-    L = len(dot)
-    contacts = np.zeros((L, L), dtype=np.int8)
-    stack = []
-    pairs = {"(": ")", "[": "]", "{": "}", "<": ">"}
-    pair_map = {v: k for k, v in pairs.items()}
-    for i, c in enumerate(dot):
-        if c in pairs:
-            stack.append((c, i))
-        elif c in pair_map:
-            for j in range(len(stack) - 1, -1, -1):
-                if stack[j][0] == pair_map[c]:
-                    _, idx = stack.pop(j)
-                    contacts[i, idx] = 1
-                    contacts[idx, i] = 1
-                    break
-    return contacts
 
 
 def sincfold_eval(
@@ -59,7 +40,7 @@ def sincfold_eval(
         sincfold_predict(
             pred_input=str(batch_fasta_path),
             out_path=str(preds_path),
-            logits=False,
+            logits=True,
             config={
                 "device": device,
                 "batch_size": kwargs.get("batch_size", 1024),
@@ -68,7 +49,7 @@ def sincfold_eval(
             nworkers=kwargs.get("nworkers", 2),
             verbose=kwargs.get("verbose", False),
         )
-
+        
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
         outputs = []
@@ -80,13 +61,13 @@ def sincfold_eval(
             edge_index = data.edge_index
             non_canonical_mask = edge_types == 'non-canonical'
 
-            pred_ct_file = preds_path / f"{seq_id}.ct"
-            if not pred_ct_file.exists():
+            pred_logits_file = preds_path / "logits" / f"{seq_id}.pk"
+            if not pred_logits_file.exists():
                 print(f"Prediction for {seq_id} not found. Skipping.")
                 continue
-
-            pred_dot = ct2dot(str(pred_ct_file))
-            pred = dotbracket_to_contacts(pred_dot)
+            
+            with pred_logits_file.open("rb") as f:
+                pred_logits = pickle.load(f)[0]
 
             pos_edge_index = edge_index[:, non_canonical_mask]
             pos_labels = torch.ones(pos_edge_index.size(1), dtype=torch.float32)
@@ -98,12 +79,14 @@ def sincfold_eval(
             all_labels = torch.concatenate([pos_labels, neg_labels], axis=0)
 
             all_edge_index = to_dense_adj(all_edge_index, batch=data.batch).squeeze(0)
-            all_edge_index_preds = pred[all_edge_index.bool()]
+            all_logits = pred_logits[all_edge_index.bool()]
+            probabilities = torch.sigmoid(all_logits)
+            predictions = (probabilities > 0.5)
 
             outputs.append({
-                "preds": torch.from_numpy(all_edge_index_preds),
+                "preds": predictions,
                 "labels": all_labels,
-                "probabilities": torch.from_numpy(pred[all_edge_index.bool()]),
+                "probabilities": probabilities,
                 "edge_types": edge_types,
                 "pair_types": data.pair_type,
             })

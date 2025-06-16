@@ -7,6 +7,7 @@ class ModelConfig:
     epochs: int = 100
     batch_size: int = 128
     lr: float = 1e-3
+    min_lr: float = 1e-8
     log_neptune: bool = False
     negative_sample_ratio: int = 1
     freeze_embeddings: bool = False

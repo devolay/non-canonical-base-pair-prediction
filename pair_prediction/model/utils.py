@@ -18,9 +18,6 @@ def get_negative_edges(batched_data: Data, sample_ratio: Optional[int] = None, c
     Returns:
         neg_edge_index: Tensor of shape [2, total_neg_edges] containing negative edge candidates.
     """
-    if validation:
-        torch.manual_seed(42)
-
     neg_edges_list = []
     ptr = batched_data.ptr
     pos_edge_index = batched_data.edge_index
@@ -68,7 +65,7 @@ def get_negative_edges(batched_data: Data, sample_ratio: Optional[int] = None, c
         
         neg_edges = torch.tensor(list(neg_set), dtype=torch.long, device=batched_data.batch.device).t().contiguous()
         
-        if sample_ratio is not None:
+        if sample_ratio is not None and not validation:
             non_canonical_pairs = sum([1 for et in edge_types_i if et == "non-canonical"]) 
             num_neg_edges = len(neg_set)
             num_samples = int(sample_ratio * non_canonical_pairs)

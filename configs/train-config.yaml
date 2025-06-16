@@ -1,13 +1,14 @@
 batch_size: 512
 epochs: 500
-lr: 0.0001
+lr: 0.001
+min_lr: 0.00000001
 log_neptune: True
 negative_sample_ratio: 8
 
 gradient_clip_value: 0.5
 gradient_clip_algorithm: value
 
-freeze_embeddings: False
+freeze_embeddings: True
 
 in_channels: 1280
 model_type: rinalmo
