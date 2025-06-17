@@ -252,9 +252,9 @@ class LitWrapper(pl.LightningModule):
         self.optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer,
-            mode='max',
+            mode='min',
             factor=0.2,
-            patience=2,
+            patience=10,
             min_lr=self.min_lr,
             verbose=True
         )
