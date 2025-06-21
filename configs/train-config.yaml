@@ -1,25 +1,21 @@
+# Training
 batch_size: 512
 epochs: 500
-lr: 0.001
+lr: 0.0001
 min_lr: 0.00000001
 log_neptune: True
 negative_sample_ratio: 8
-
 gradient_clip_value: 0.5
 gradient_clip_algorithm: value
 
-freeze_embeddings: True
-
+# Architecture
 in_channels: 1280
 model_type: rinalmo
 gnn_channels:
   - 1280
-  - 512
-  - 512
   - 256
-cnn_channels:
-  - 1280
-  - 1280
-  - 1280
-  - 64
-dropout: 0.3
+  - 256
+cnn_head_embed_dim: 64
+cnn_head_num_blocks: 3
+freeze_embeddings: True
+dropout: 0.2

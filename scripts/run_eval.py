@@ -20,8 +20,7 @@ def validate_multi_input(ctx, param, value):
 @click.option('--datasets', callback=validate_multi_input, required=True, help='List of dataset names to evaluate (e.g., rinalmo, sincfold)')
 @click.option('--output_dir', type=click.Path(), default=(BASE_DIR / "outputs"), required=True, help='Directory to save evaluation results')
 @click.option('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
-@click.option('--negative_sample_ratio', type=int, default=8)
-def main(models: List[str], datasets: List[str], output_dir: Path, device: str, negative_sample_ratio: int):
+def main(models: List[str], datasets: List[str], output_dir: Path, device: str):
     device = torch.device(device)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -50,13 +49,11 @@ def main(models: List[str], datasets: List[str], output_dir: Path, device: str, 
                         model=model,
                         dataset=dataset,
                         device=device,
-                        negative_sample_ratio=negative_sample_ratio,
                     )
                 case 'sincfold' | 'ufold' | 'spotrna':
                     outputs = eval_fn(
                         dataset=dataset,
                         device=device,
-                        negative_sample_ratio=negative_sample_ratio,
                     )
                 
 

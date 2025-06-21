@@ -37,7 +37,6 @@ def run_spotrna_on_fasta(fasta_path, output_dir, device):
 def spotrna_eval(
     dataset: LinkPredictionDataset,
     device: torch.device,
-    negative_sample_ratio: int,
     **kwargs
 ) -> List[Dict[str, Any]]:
     try:
@@ -83,7 +82,7 @@ def spotrna_eval(
             pos_edge_index = edge_index[:, non_canonical_mask]
             pos_labels = torch.ones(pos_edge_index.size(1), dtype=torch.float32)
 
-            neg_edge_index = get_negative_edges(data, sample_ratio=negative_sample_ratio, validation=True)
+            neg_edge_index = get_negative_edges(data, validation=True)
             neg_labels = torch.zeros(neg_edge_index.size(1), dtype=torch.float32)
 
             all_edge_index = torch.concatenate([pos_edge_index, neg_edge_index], axis=1)
@@ -93,6 +92,8 @@ def spotrna_eval(
             all_edge_index_preds = pred[all_edge_index.bool()] > SPOTRNA_THRESHOLD
 
             outputs.append({
+                "id": seq_id,
+                "seq": data.seq[0],
                 "preds": torch.from_numpy(all_edge_index_preds),
                 "labels": all_labels,
                 "probabilities": torch.from_numpy(pred[all_edge_index.bool()]),

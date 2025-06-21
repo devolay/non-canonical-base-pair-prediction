@@ -1,7 +1,9 @@
 import os
+import pickle
 import torch
 import numpy as np
 
+from itertools import chain
 from pathlib import Path
 from sklearn.metrics import (
     precision_score,
@@ -16,6 +18,7 @@ from pair_prediction.visualization.metrics import (
 )
 
 def collect_and_save_metrics(outputs, output_path):
+    # breakpoint()
     preds = torch.cat([x["preds"] for x in outputs], dim=0)
     labels = torch.cat([x["labels"] for x in outputs], dim=0)
     probabilities = torch.cat([x["probabilities"] for x in outputs], dim=0)
@@ -47,7 +50,10 @@ def collect_and_save_metrics(outputs, output_path):
 
     fig_cm.savefig(f"{output_path}/confusion_matrix.png")
     fig_roc.savefig(f"{output_path}/roc_curve.png")
-    fig_hist.savefig(f"{output_path}/probability_distribution.png") 
+    fig_hist.savefig(f"{output_path}/probability_distribution.png")
+
+    with open(f"{output_path}/results.pkl", "wb") as f:
+        pickle.dump(outputs, f)
 
 
 def rmtree(f: Path):

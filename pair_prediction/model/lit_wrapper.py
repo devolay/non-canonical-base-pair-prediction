@@ -3,18 +3,12 @@ import numpy as np
 import torch.nn.functional as F
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
-import math
 
 from sklearn.metrics import (
-    confusion_matrix,
-    roc_curve,
-    auc,
     precision_score,
     recall_score,
     f1_score,
 )
-from torch.optim.lr_scheduler import LambdaLR
-
 
 from pair_prediction.model.model import LinkPredictorModel
 from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
@@ -71,6 +65,8 @@ class LitWrapper(pl.LightningModule):
             self.model = RiNAlmoLinkPredictionModel(
                 in_channels=config.in_channels,
                 gnn_channels=config.gnn_channels,
+                cnn_head_embed_dim=config.cnn_head_embed_dim,
+                cnn_head_num_blocks=config.cnn_head_num_blocks,
                 dropout=config.dropout
             )
             self.model._load_pretrained_lm_weights(
@@ -99,16 +95,16 @@ class LitWrapper(pl.LightningModule):
         effective_accum = self.trainer.accumulate_grad_batches * num_devices
         return (batches // effective_accum) * self.trainer.max_epochs
 
-    def _common_step(self, batch, negative_sample_ratio = None):
+    def _common_step(self, batch, validation: bool = False):
         if self.model_type == "global":
-            all_logits, all_labels = self._global_model_step(batch, negative_sample_ratio)
+            all_logits, all_labels = self._global_model_step(batch, validation)
         elif self.model_type == "rinalmo":
-            all_logits, all_labels = self._rinalmo_step(batch, negative_sample_ratio)
+            all_logits, all_labels = self._rinalmo_step(batch, validation)
         else:
-            all_logits, all_labels = self._local_model_step(batch, negative_sample_ratio)
+            all_logits, all_labels = self._local_model_step(batch, validation)
         return all_logits, all_labels
 
-    def _global_model_step(self, batch, negative_sample_ratio: int):
+    def _global_model_step(self, batch, validation: bool = False):
         edge_mask = np.concatenate(batch.edge_type)
         edge_mask = edge_mask == 'non-canonical'
         message_passing_edge_index = batch.edge_index[:, ~edge_mask]
@@ -118,7 +114,7 @@ class LitWrapper(pl.LightningModule):
         pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, global_representation, batch.batch)
         pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
 
-        neg_edge_index = get_negative_edges(batch, sample_ratio=negative_sample_ratio)
+        neg_edge_index = get_negative_edges(batch, validation=validation)
         neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, global_representation, batch.batch)
         neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
 
@@ -126,19 +122,19 @@ class LitWrapper(pl.LightningModule):
         all_labels = torch.cat([pos_labels, neg_labels], dim=0)
         return all_logits, all_labels
     
-    def _rinalmo_step(self, batch, negative_sample_ratio):
+    def _rinalmo_step(self, batch, validation: bool = False):
         edge_mask = np.concatenate(batch.edge_type)
         edge_mask = edge_mask == 'non-canonical'
         message_passing_edge_index = batch.edge_index[:, ~edge_mask]
-        rna_tokens = torch.tensor(self.tokenizer.batch_tokenize(batch.seq),device=self.device)
+        rna_tokens = torch.tensor(self.tokenizer.batch_tokenize(batch.seq), device=self.device)
         with torch.cuda.amp.autocast():
-            node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index)
+            node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index, batch.batch)
 
         pos_edge_index = batch.edge_index[:, edge_mask]
         pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, batch.batch)
         pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
 
-        neg_edge_index = get_negative_edges(batch, sample_ratio=negative_sample_ratio)
+        neg_edge_index = get_negative_edges(batch, validation=validation)
         neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, batch.batch)
         neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
 
@@ -146,7 +142,7 @@ class LitWrapper(pl.LightningModule):
         all_labels = torch.cat([pos_labels, neg_labels], dim=0)
         return all_logits, all_labels
     
-    def _local_model_step(self, batch, negative_sample_ratio):
+    def _local_model_step(self, batch, validation: bool = False):
         edge_mask = np.concatenate(batch.edge_type)
         edge_mask = edge_mask == 'non-canonical'
         message_passing_edge_index = batch.edge_index[:, ~edge_mask]
@@ -156,7 +152,7 @@ class LitWrapper(pl.LightningModule):
         pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index)
         pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
 
-        neg_edge_index = get_negative_edges(batch, sample_ratio=negative_sample_ratio)
+        neg_edge_index = get_negative_edges(batch, validation=validation)
         neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index)
         neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
 
@@ -168,7 +164,7 @@ class LitWrapper(pl.LightningModule):
         """
         Training step computing loss for link prediction.
         """
-        all_logits, all_labels = self._common_step(batch, self.negative_sample_ratio)
+        all_logits, all_labels = self._common_step(batch)
         loss = F.binary_cross_entropy_with_logits(all_logits, all_labels)
         self.log("train_loss", loss, prog_bar=True, logger=True)
         return loss
@@ -178,7 +174,7 @@ class LitWrapper(pl.LightningModule):
         Validation step computing loss, accuracy, and collects predictions,
         labels, and probabilities for logging.
         """
-        all_logits, all_labels = self._common_step(batch)
+        all_logits, all_labels = self._common_step(batch, validation=True)
 
         loss = F.binary_cross_entropy_with_logits(all_logits, all_labels)
         self.log("val_loss", loss, prog_bar=True, logger=True)
@@ -253,8 +249,7 @@ class LitWrapper(pl.LightningModule):
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer,
             mode='min',
-            factor=0.2,
-            patience=10,
+            factor=0.1,
             min_lr=self.min_lr,
             verbose=True
         )

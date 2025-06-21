@@ -14,7 +14,6 @@ def base_eval(
     model: RiNAlmoLinkPredictionModel,
     dataset: LinkPredictionDataset,
     device: torch.device,
-    negative_sample_ratio: int,
     **kwargs: Any
 ) -> List[Dict[str, Any]]:
     model.to(device)
@@ -41,7 +40,7 @@ def base_eval(
             pos_labels = torch.ones(pos_logits.size(0), device=device, dtype=torch.float32)
 
             # Negative edges
-            neg_edge_index = get_negative_edges(batch, sample_ratio=negative_sample_ratio, validation=True)
+            neg_edge_index = get_negative_edges(batch, validation=True)
             neg_logits = model.compute_edge_logits(node_embeddings, neg_edge_index, batch.batch)
             neg_labels = torch.zeros(neg_logits.size(0), device=device, dtype=torch.float32)
 
@@ -52,11 +51,14 @@ def base_eval(
             predictions = (probabilities > 0.5)
 
             outputs.append({
+                "id": batch.id,
+                "seq": batch.seq,
                 "preds": predictions.cpu(),
                 "labels": all_labels.cpu(),
                 "probabilities": probabilities.cpu(),
                 "edge_types": np.concatenate(batch.edge_type),
                 "pair_types": batch.pair_type.cpu(),
+                "batch": batch.batch.cpu(),
             })
     
     return outputs

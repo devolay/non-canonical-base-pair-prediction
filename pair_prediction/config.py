@@ -18,7 +18,8 @@ class ModelConfig:
     in_channels: int = 4
     model_type: str = "local"
     gnn_channels: List[int] = field(default_factory=lambda: [64, 64])
-    cnn_channels: Optional[List[int]] = field(default=None)
+    cnn_head_embed_dim: int = 64
+    cnn_head_num_blocks: int = 2
     dropout: float = 0.0
     
     @classmethod

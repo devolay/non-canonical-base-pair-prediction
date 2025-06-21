@@ -20,7 +20,6 @@ from pair_prediction.constants import BASE_DIR
 def sincfold_eval(
     dataset: LinkPredictionDataset,
     device: torch.device,
-    negative_sample_ratio: int,
     **kwargs
 ) -> List[Dict[str, Any]]:
     try:
@@ -72,7 +71,7 @@ def sincfold_eval(
             pos_edge_index = edge_index[:, non_canonical_mask]
             pos_labels = torch.ones(pos_edge_index.size(1), dtype=torch.float32)
 
-            neg_edge_index = get_negative_edges(data, sample_ratio=negative_sample_ratio, validation=True)
+            neg_edge_index = get_negative_edges(data, validation=True)
             neg_labels = torch.zeros(neg_edge_index.size(1), dtype=torch.float32)
 
             all_edge_index = torch.concatenate([pos_edge_index, neg_edge_index], axis=1)
@@ -84,6 +83,8 @@ def sincfold_eval(
             predictions = (probabilities > 0.5)
 
             outputs.append({
+                "id": seq_id,
+                "seq": seq,
                 "preds": predictions,
                 "labels": all_labels,
                 "probabilities": probabilities,
