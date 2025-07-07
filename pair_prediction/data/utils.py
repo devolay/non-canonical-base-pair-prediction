@@ -57,5 +57,5 @@ def load_dataset(dataset_name: str, root: str = 'data') -> LinkPredictionDataset
     if dataset_name == "validation":
         dataset = LinkPredictionDataset(root=root, mode="validation")
     else:
-        dataset = LinkPredictionDataset(root=f"{root}/evaluation/{dataset_name}")
+        dataset = LinkPredictionDataset(root=f"{root}/evaluation/{dataset_name}_clean")
     return dataset

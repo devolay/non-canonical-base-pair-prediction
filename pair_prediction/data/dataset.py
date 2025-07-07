@@ -60,7 +60,13 @@ class LinkPredictionDataset(InMemoryDataset):
             seq, details = read_idx_file(idx_file_path)
             amt_matrix = read_matrix_file(amt_file_path)
 
-            graph = create_rna_graph(seq, amt_matrix)
+            try:
+                graph = create_rna_graph(seq, amt_matrix)
+            except ValueError as e:
+                raise ValueError(
+                    f"Error creating graph for {file_stem}: {e}"
+                ) from e
+            
             data = from_networkx(graph)
             data.seq = seq
             data.id = file_stem

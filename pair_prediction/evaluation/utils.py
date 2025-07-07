@@ -3,7 +3,6 @@ import pickle
 import torch
 import numpy as np
 
-from itertools import chain
 from pathlib import Path
 from sklearn.metrics import (
     precision_score,
@@ -18,7 +17,6 @@ from pair_prediction.visualization.metrics import (
 )
 
 def collect_and_save_metrics(outputs, output_path):
-    # breakpoint()
     preds = torch.cat([x["preds"] for x in outputs], dim=0)
     labels = torch.cat([x["labels"] for x in outputs], dim=0)
     probabilities = torch.cat([x["probabilities"] for x in outputs], dim=0)

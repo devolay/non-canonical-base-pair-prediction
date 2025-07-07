@@ -13,8 +13,9 @@ in_channels: 1280
 model_type: rinalmo
 gnn_channels:
   - 1280
+  - 512
   - 256
-  - 256
+  - 128
 cnn_head_embed_dim: 64
 cnn_head_num_blocks: 3
 freeze_embeddings: True

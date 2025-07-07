@@ -7,7 +7,7 @@ def one_hot_encode_sequence(seq: str) -> np.ndarray:
     """
     One-hot encodes a sequence of amino acids or nucleotides.
     """
-    encoder = OneHotEncoder(categories=[["A", "C", "G", "U", "I", "D"]])
+    encoder = OneHotEncoder(categories=[["A", "C", "G", "U", "D"]])
     return encoder.fit_transform(np.array(list(seq)).reshape(-1, 1)).toarray().astype(np.float32)
 
 

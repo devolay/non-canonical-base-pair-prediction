@@ -114,7 +114,7 @@ class LitWrapper(pl.LightningModule):
         pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, global_representation, batch.batch)
         pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
 
-        neg_edge_index = get_negative_edges(batch, validation=validation)
+        neg_edge_index = get_negative_edges(batch, validation=validation, sample_ratio=self.negative_sample_ratio)
         neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, global_representation, batch.batch)
         neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
 
@@ -128,13 +128,13 @@ class LitWrapper(pl.LightningModule):
         message_passing_edge_index = batch.edge_index[:, ~edge_mask]
         rna_tokens = torch.tensor(self.tokenizer.batch_tokenize(batch.seq), device=self.device)
         with torch.cuda.amp.autocast():
-            node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index, batch.batch)
+            node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index)
 
         pos_edge_index = batch.edge_index[:, edge_mask]
         pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, batch.batch)
         pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
 
-        neg_edge_index = get_negative_edges(batch, validation=validation)
+        neg_edge_index = get_negative_edges(batch, validation=validation, sample_ratio=self.negative_sample_ratio)
         neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, batch.batch)
         neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
 
@@ -152,7 +152,7 @@ class LitWrapper(pl.LightningModule):
         pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index)
         pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
 
-        neg_edge_index = get_negative_edges(batch, validation=validation)
+        neg_edge_index = get_negative_edges(batch, validation=validation, sample_ratio=self.negative_sample_ratio)
         neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index)
         neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
 

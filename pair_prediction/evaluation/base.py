@@ -18,7 +18,7 @@ def base_eval(
 ) -> List[Dict[str, Any]]:
     model.to(device)
     model.eval()
-    dataloader = DataLoader(dataset, batch_size=kwargs.get("batch_size", 256), shuffle=False)
+    dataloader = DataLoader(dataset, batch_size=kwargs.get("batch_size", 1), shuffle=False)
 
     outputs = []
     with torch.no_grad():
@@ -51,14 +51,12 @@ def base_eval(
             predictions = (probabilities > 0.5)
 
             outputs.append({
-                "id": batch.id,
-                "seq": batch.seq,
+                "data": batch.cpu(),
                 "preds": predictions.cpu(),
                 "labels": all_labels.cpu(),
                 "probabilities": probabilities.cpu(),
                 "edge_types": np.concatenate(batch.edge_type),
                 "pair_types": batch.pair_type.cpu(),
-                "batch": batch.batch.cpu(),
             })
     
     return outputs

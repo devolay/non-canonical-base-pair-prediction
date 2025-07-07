@@ -1,9 +1,25 @@
 import torch
+import torch.nn as nn
 
 from typing import Optional
 from torch_geometric.data import Data
+from torch_geometric.utils import to_dense_adj, dense_to_sparse
 
-def get_negative_edges(batched_data: Data, sample_ratio: Optional[int] = None, consider_multiplets: bool = True, validation: bool = False) -> torch.Tensor:
+BASE2IDX = {'A': 0, 'C': 1, 'G': 2, 'U': 3}
+PAIR2IDX = {
+    'AA': 0, 'AC': 1, 'AG': 2, 'AU': 3,
+    'CA': 4, 'CC': 5, 'CG': 6, 'CU': 7,
+    'GA': 8, 'GC': 9, 'GG': 10, 'GU': 11,
+    'UA': 12, 'UC': 13, 'UG': 14, 'UU': 15
+}
+CANONICAL_IDXS = [3, 6, 9, 12]
+
+def create_pair_matrix(seq: str, device=None):
+    """Generate a pair matrix for a given sequence."""
+    idx = torch.tensor([BASE2IDX[b] for b in seq], device=device)
+    return 4 * idx[:, None] + idx[None, :]
+
+def get_negative_edges(batched_data: Data, sample_ratio: Optional[int] = None, validation: bool = False) -> torch.Tensor:
     """
     Given a batched Data object (from PyG's DataLoader) that contains:
       - batched_data.ptr: a tensor of shape [num_graphs+1] indicating node boundaries.
@@ -20,59 +36,40 @@ def get_negative_edges(batched_data: Data, sample_ratio: Optional[int] = None, c
     """
     neg_edges_list = []
     ptr = batched_data.ptr
-    pos_edge_index = batched_data.edge_index
     num_graphs = ptr.size(0) - 1
 
+    pos_edge_masks = to_dense_adj(batched_data.edge_index, batch=batched_data.batch).squeeze(0).bool()
+
     for i in range(num_graphs):
-        # Determine node boundaries for the current graph.
         start = ptr[i].item()
         end = ptr[i+1].item()
         device = batched_data.batch.device
-        nodes = torch.arange(start, end, device=device)
+        sequence = batched_data.seq[i]
 
-        # Generate all possible candidate edges for this graph (excluding self-loops).
-        u, v = torch.meshgrid(nodes, nodes, indexing='ij')
-        u = u.reshape(-1)
-        v = v.reshape(-1)
-        candidate_edges = torch.stack([u, v], dim=0)
-        candidate_edges = candidate_edges[:, candidate_edges[0] != candidate_edges[1]]
-        candidate_edges = {tuple(edge) for edge in candidate_edges.t().tolist()}
+        pos_edge_mask = pos_edge_masks[i,:]
+        pad_value = pos_edge_mask.size(-1) - len(sequence)
+        pad = nn.ZeroPad2d((0, pad_value, 0, pad_value))
         
-        # Extract the positive edges for the current graph (phosphodiester or canonical).
-        mask_pos = (pos_edge_index[0] >= start) & (pos_edge_index[0] < end)
-        pos_edges_i = pos_edge_index[:, mask_pos]
-        pos_list = [tuple(edge) for edge in pos_edges_i.t().tolist()]
-        pos_set = set(pos_list)
-        
-        # Get the edge types for these positive edges.
-        edge_types_i = batched_data.edge_type[i]
-        
-        # Remove any candidate edge that is already positive.
-        neg_set = candidate_edges - pos_set
+        all_pairings_matrix = create_pair_matrix(sequence, device=device)
+        canonical_lookup_table = torch.zeros(16, dtype=torch.bool, device=device)
+        canonical_lookup_table[CANONICAL_IDXS] = True
+        candidate_mask = ~canonical_lookup_table[all_pairings_matrix]
+        candidate_mask.fill_diagonal_(False)
+        candidate_mask = pad(candidate_mask)
+        candidate_mask &= ~pos_edge_mask
 
-        # Identify all potential multiplet edges.
-        if consider_multiplets:
-            canonical_nodes = set()
-            for edge, et in zip(pos_list, edge_types_i):
-                if et == "canonical":
-                    canonical_nodes.update(edge)  # add both nodes of the edge
-            
-            multiplet_edges = {
-                edge for edge in candidate_edges 
-                if (edge[0] in canonical_nodes or edge[1] in canonical_nodes) and edge not in pos_set
-            }
-            neg_set |= multiplet_edges
-        
-        neg_edges = torch.tensor(list(neg_set), dtype=torch.long, device=batched_data.batch.device).t().contiguous()
+        row, col = torch.nonzero(candidate_mask, as_tuple=True)
+        candidate_edge_index = torch.stack([row + start, col + start], dim=0) 
         
         if sample_ratio is not None and not validation:
-            non_canonical_pairs = sum([1 for et in edge_types_i if et == "non-canonical"]) 
-            num_neg_edges = len(neg_set)
-            num_samples = int(sample_ratio * non_canonical_pairs)
+            edge_types = batched_data.edge_type[i]
+            num_neg_edges = candidate_edge_index.size(1)
+            non_canonical_pairs_num = sum([1 for et in edge_types if et == "non-canonical"]) 
+            num_samples = int(sample_ratio * non_canonical_pairs_num)
             if num_samples < num_neg_edges:
                 indices = torch.randperm(num_neg_edges, device=device)[:num_samples]
-                neg_edges = neg_edges[:, indices]
-        neg_edges_list.append(neg_edges)
+                candidate_edge_index = candidate_edge_index[:, indices]
+        neg_edges_list.append(candidate_edge_index)
 
     neg_edge_index = torch.cat(neg_edges_list, dim=1)
     return neg_edge_index

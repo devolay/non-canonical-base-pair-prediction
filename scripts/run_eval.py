@@ -1,10 +1,10 @@
-import argparse
 import torch
 import click
 from pathlib import Path
 from typing import List
 
 from pair_prediction.evaluation import EVAL_FUNCTIONS, collect_and_save_metrics
+from pair_prediction.evaluation.ufold import split_multi_ct
 from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
 from pair_prediction.data.utils import load_dataset
 from pair_prediction.constants import BASE_DIR
@@ -39,7 +39,9 @@ def main(models: List[str], datasets: List[str], output_dir: Path, device: str):
                 case 'rinalmo':
                     model = RiNAlmoLinkPredictionModel(
                         in_channels=1280,
-                        gnn_channels=[1280, 512, 512, 256],
+                        gnn_channels=[1280, 128, 128],
+                        cnn_head_embed_dim=64,
+                        cnn_head_num_blocks=3
                     )
                     
                     checkpoint = torch.load(BASE_DIR / "models" / "model.ckpt", map_location=device)
@@ -50,12 +52,23 @@ def main(models: List[str], datasets: List[str], output_dir: Path, device: str):
                         dataset=dataset,
                         device=device,
                     )
-                case 'sincfold' | 'ufold' | 'spotrna':
+                case 'sincfold' | 'spotrna':
                     outputs = eval_fn(
                         dataset=dataset,
                         device=device,
                     )
-                
+                case 'ufold':
+                    results_file = output_dir / f"{model_name}_{dataset_name}" / f"{model_name}_{dataset_name}.ct"
+                    if not results_file.exists():
+                        raise FileNotFoundError(f"Expected results file {results_file} not found.")
+                    pred_dir = output_dir / f"{model_name}_{dataset_name}" / "preds"
+                    pred_dir.mkdir(parents=True, exist_ok=True)
+                    split_multi_ct(results_file, outdir=pred_dir)
+                    outputs = eval_fn(
+                        dataset=dataset,
+                        device=device,
+                        ct_source=pred_dir,
+                    )
 
             collect_and_save_metrics(outputs, output_dir / f"{model_name}_{dataset_name}")
             print(f"Saved results for {model_name} on {dataset_name}.")

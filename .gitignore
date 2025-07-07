@@ -176,3 +176,11 @@ cython_debug/
 *.png
 *.out
 *.pt
+*.seed
+*.pdb
+*.pkl
+*.ct
+*.fasta
+*.ckpt
+
+results.txt

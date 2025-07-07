@@ -9,7 +9,6 @@ from torch_geometric.utils import to_dense_adj
 from torch_geometric.loader import DataLoader
 
 from sincfold import pred as sincfold_predict
-from sincfold.utils import ct2dot
 
 from pair_prediction.data.dataset import LinkPredictionDataset
 from pair_prediction.model.utils import get_negative_edges
@@ -42,7 +41,7 @@ def sincfold_eval(
             logits=True,
             config={
                 "device": device,
-                "batch_size": kwargs.get("batch_size", 1024),
+                "batch_size": kwargs.get("batch_size", 1),
                 "max_len": kwargs.get("max_len", 4096),
             },
             nworkers=kwargs.get("nworkers", 2),
