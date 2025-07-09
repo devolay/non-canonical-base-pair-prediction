@@ -12,7 +12,7 @@ PAIR2IDX = {
     'GA': 8, 'GC': 9, 'GG': 10, 'GU': 11,
     'UA': 12, 'UC': 13, 'UG': 14, 'UU': 15
 }
-CANONICAL_IDXS = [3, 6, 9, 12]
+CANONICAL_IDXS = [3, 6, 9, 12, 11, 14] 
 
 def create_pair_matrix(seq: str, device=None):
     """Generate a pair matrix for a given sequence."""
