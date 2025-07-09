@@ -1,5 +1,6 @@
 import os
 import os.path as osp
+import pandas as pd
 from tqdm import tqdm
 
 from torch_geometric.data import InMemoryDataset
@@ -7,6 +8,7 @@ from torch_geometric.utils import from_networkx
 
 from pair_prediction.data.processing import create_rna_graph
 from pair_prediction.data.read import read_idx_file, read_matrix_file
+from pair_prediction.constants import FAMILY_MAPPING_FILE, TRAIN_FAMILIES
 
 
 class LinkPredictionDataset(InMemoryDataset):
@@ -35,9 +37,19 @@ class LinkPredictionDataset(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        raw_dir = osp.join(self.raw_dir, "idxs")
-        raw_files = [f for f in os.listdir(raw_dir) if f.endswith(".idx")]
-        return sorted(raw_files)
+        match self.mode:
+            case "train":
+                family_mapping = pd.read_csv(osp.join(self.raw_dir, FAMILY_MAPPING_FILE))
+                family_mapping = family_mapping[family_mapping['rfam_name'].isin(TRAIN_FAMILIES)]
+                return sorted(family_mapping['id'].values.tolist())
+            case "validation":
+                family_mapping = pd.read_csv(osp.join(self.raw_dir, FAMILY_MAPPING_FILE))
+                family_mapping = family_mapping[~family_mapping['rfam_name'].isin(TRAIN_FAMILIES)]
+                return sorted(family_mapping['id'].values.tolist())
+            case _:
+                raw_dir = osp.join(self.raw_dir, "idxs")
+                raw_files = [f for f in os.listdir(raw_dir) if f.endswith(".idx")]
+                return sorted(raw_files)        
 
     @property
     def processed_file_names(self):
@@ -46,11 +58,6 @@ class LinkPredictionDataset(InMemoryDataset):
     def process(self):
         data_list = []
         raw_idx_files = self.raw_file_names
-
-        if self.mode == "validation":
-            raw_idx_files = raw_idx_files[: len(raw_idx_files) // 10]
-        elif self.mode == "train":
-            raw_idx_files = raw_idx_files[len(raw_idx_files) // 10 :]
 
         for idx_file_name in tqdm(raw_idx_files, desc=f"Processing {self.prefix} data"):
             file_stem, _ = osp.splitext(idx_file_name)
