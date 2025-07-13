@@ -21,6 +21,7 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         gnn_attention_heads: int = 4,
         cnn_head_embed_dim: int = 64,
         cnn_head_num_blocks: int = 2,
+        out_channels: int = 64,
         dropout: float = 0.0,
     ):
         """
@@ -38,23 +39,23 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         """
         super().__init__()
         self.dropout = dropout
+
         self.tokenizer = Alphabet()
         self.rinalmo = RiNALMo(model_config("giga"))
+        self.pad_idx = self.rinalmo.config['model']['embedding'].padding_idx
+        self.rna_indices = torch.tensor([self.tokenizer.get_idx(token) for token in RNA_TOKENS])
 
         self.gnn_convs = nn.ModuleList()
         self.gnn_convs.append(GATv2Conv(in_channels, int(gnn_channels[0] / gnn_attention_heads), residual=True, heads=gnn_attention_heads))
         for i in range(1, len(gnn_channels)):
             self.gnn_convs.append(GATv2Conv(gnn_channels[i-1], int(gnn_channels[i] / gnn_attention_heads), residual=True, heads=gnn_attention_heads))
 
-        self.prediction_head = SecStructPredictionHead(
-            embed_dim=gnn_channels[-1],
-            num_blocks=cnn_head_num_blocks,
-            conv_dim=cnn_head_embed_dim,
+        predictor_in_dim = 2 * gnn_channels[-1]
+        self.link_predictor = nn.Sequential(
+            nn.Linear(predictor_in_dim, gnn_channels[-1]),
+            nn.ReLU(),
+            nn.Linear(gnn_channels[-1], 1)
         )
-
-        self.pad_idx = self.rinalmo.config['model']['embedding'].padding_idx
-        self.rna_indices = torch.tensor([self.tokenizer.get_idx(token) for token in RNA_TOKENS])
-
 
     def _load_pretrained_lm_weights(self, pretrained_weights_path: str, freeze_lm: bool = True):
         self.rinalmo.load_state_dict(torch.load(pretrained_weights_path))
@@ -78,16 +79,13 @@ class RiNAlmoLinkPredictionModel(nn.Module):
             global_reps (torch.Tensor): Global representations from CNN encoder.
         """
         node_embeddings = self.rinalmo(tokens)["representation"]
-        pad_mask = tokens.eq(self.pad_idx)
         nucleotide_mask = torch.isin(tokens, self.rna_indices.to(tokens.device))
-        
-        node_embeddings[pad_mask, :] = 0.
-        node_embeddings = node_embeddings[nucleotide_mask & ~pad_mask]
+        node_embeddings = node_embeddings[nucleotide_mask]
 
         for conv in self.gnn_convs:
             node_embeddings = conv(node_embeddings, edge_index)
-            node_embeddings = F.relu(node_embeddings)
             node_embeddings = F.dropout(node_embeddings, p=self.dropout, training=self.training)
+            node_embeddings = F.elu(node_embeddings)
         
         return node_embeddings
 
@@ -96,22 +94,10 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         self,
         node_embeddings: torch.Tensor,
         edge_index: torch.Tensor,
-        batch: torch.Tensor,
     ) -> torch.Tensor:
-        """
-        Compute logits for edges by concatenating local node embeddings (src & dst)
-        with the corresponding global representation.
+        "Computes edge logits based on node embeddings."
+        # Dot Product does not work well for this use-case (not sure why?)
+        # return (node_embeddings[edge_index[0]] * node_embeddings[edge_index[1]]).sum(dim=-1)
+        edge_candidate = torch.cat([node_embeddings[edge_index[0]], node_embeddings[edge_index[1]]], dim=-1)
+        return self.link_predictor(edge_candidate).squeeze(-1)
 
-        Args:
-            node_embeddings (torch.Tensor): Node embeddings [total_nodes, hidden_channels].
-            edge_index (torch.Tensor): Tensor of edge indices.
-            global_reps (torch.Tensor): Global representations [batch_size, hidden_channels].
-            batch (torch.Tensor): Batch vector assigning each node to a graph.
-
-        Returns:
-            logits (torch.Tensor): Logits for each edge.
-        """
-        x_dense, _ = to_dense_batch(node_embeddings, batch)
-        logits = self.prediction_head(x_dense)
-        edges_dense = to_dense_adj(edge_index, batch)
-        return logits[edges_dense.bool()]

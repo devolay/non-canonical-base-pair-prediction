@@ -4,20 +4,32 @@ import yaml
 
 @dataclass
 class ModelConfig:
+    # Training
+    log_neptune: bool = False
     epochs: int = 100
     batch_size: int = 128
     lr: float = 1e-3
     min_lr: float = 1e-8
-    log_neptune: bool = False
+    
+    # Negative Sampling
     negative_sample_ratio: int = 1
-    freeze_embeddings: bool = False
-
+    hard_negative_sampling: bool = False
+    
+    # Gradient Clipping
+    use_gradient_clipping: bool = False
     gradient_clip_value: float = 0.0
     gradient_clip_algorithm: str = "norm"
+
+    # Scheduler
+    use_scheduler: bool = False
+    scheduler_patience: int = 10
     
-    in_channels: int = 4
+    # Architecture
     model_type: str = "local"
+    freeze_embeddings: bool = False
+    in_channels: int = 4
     gnn_channels: List[int] = field(default_factory=lambda: [64, 64])
+    out_channels: int = 64
     cnn_head_embed_dim: int = 64
     cnn_head_num_blocks: int = 2
     dropout: float = 0.0

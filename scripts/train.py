@@ -54,8 +54,8 @@ def main(args):
         log_every_n_steps=10,
         accelerator="gpu",
         callbacks=[checkpoint_callback, early_stop_callback, lr_monitor],
-        gradient_clip_val=config.gradient_clip_value,
-        gradient_clip_algorithm=config.gradient_clip_algorithm,
+        gradient_clip_val=config.gradient_clip_value if config.use_gradient_clipping else None,
+        gradient_clip_algorithm=config.gradient_clip_algorithm if config.use_gradient_clipping else None,
     )
 
     if config.log_neptune:
