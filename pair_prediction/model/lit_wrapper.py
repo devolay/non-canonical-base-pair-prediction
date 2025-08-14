@@ -76,7 +76,7 @@ class LitWrapper(pl.LightningModule):
                 dropout=config.dropout
             )
             self.model._load_pretrained_lm_weights(
-                "/home/inf141171/non-canonical-base-pair-prediction/models/rinalmo/rinalmo_giga_pretrained.pt",
+                "/workspace/non-canonical-base-pair-prediction/models/rinalmo/rinalmo_giga_pretrained.pt",
                 freeze_lm=config.freeze_embeddings
             )
             self.tokenizer = Alphabet()
@@ -270,7 +270,6 @@ class LitWrapper(pl.LightningModule):
             factor=0.1,
             min_lr=self.min_lr,
             patience=self.scheduler_patience,
-            verbose=True
         )
 
         return {

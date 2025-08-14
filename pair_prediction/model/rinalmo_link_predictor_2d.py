@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch_geometric.nn import GAT
+from torch_geometric.nn import GAT, GATConv
 from torch_geometric.utils import to_dense_batch, to_dense_adj
 
 from rinalmo.model.model import RiNALMo
@@ -44,9 +44,9 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         self.rna_indices = torch.tensor([self.tokenizer.get_idx(token) for token in RNA_TOKENS])
 
         self.gnn_convs = nn.ModuleList()
-        self.gnn_convs.append(GAT(in_channels, gnn_channels[0], 1))
+        self.gnn_convs.append(GATConv(in_channels, int(gnn_channels[0] / gnn_attention_heads), heads=gnn_attention_heads, residual=True))
         for i in range(1, len(gnn_channels)):
-            self.gnn_convs.append(GAT(gnn_channels[i-1], gnn_channels[i], 1))
+            self.gnn_convs.append(GATConv(gnn_channels[i-1], int(gnn_channels[i] / gnn_attention_heads), heads=gnn_attention_heads, residual=True))
         
         self.prediction_head = SecStructPredictionHead(
             embed_dim=gnn_channels[-1],
