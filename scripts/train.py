@@ -23,6 +23,7 @@ def parse_args():
     return parser.parse_args()
 
 def main(args):
+    pl.seed_everything(42)
     config = ModelConfig.from_yaml(args.config)
     
     train_dataset = LinkPredictionDataset(root=DATA_DIR, mode="train")

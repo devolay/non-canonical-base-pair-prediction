@@ -37,8 +37,10 @@ def enumerate_negative_candidates(batched_data: Data) -> Tuple[torch.Tensor, tor
     ptr = batched_data.ptr          # [G+1]
     num_graphs = ptr.numel() - 1
     device = batched_data.batch.device
-    pos_adj = to_dense_adj(batched_data.edge_index, batch=batched_data.batch).squeeze(0).bool()
-
+    pos_adj = to_dense_adj(batched_data.edge_index, batch=batched_data.batch).bool()
+    if num_graphs > 1:
+        pos_adj = pos_adj.squeeze(0)
+    
     neg_edges:   List[torch.Tensor] = []
     graph_ids:   List[torch.Tensor] = []
 
@@ -46,18 +48,18 @@ def enumerate_negative_candidates(batched_data: Data) -> Tuple[torch.Tensor, tor
         start, end = ptr[g].item(), ptr[g + 1].item()
         seq  = batched_data.seq[g]
 
-        # positive mask → square matrix (pad to max-len)
-        pos_mask  = pos_adj[g]
-        pad_size  = pos_mask.size(-1) - len(seq)
-        pad  = nn.ZeroPad2d((0, pad_size, 0, pad_size))
+        pos_mask  = pos_adj[g][:len(seq), :len(seq)]
 
-        # canonical / self-loop removal
+        # candidate edges
         pair_matrix = create_pair_matrix(seq, device=device)                 # [L,L]
         canonical_table = torch.zeros(16, device=device, dtype=torch.bool)
         canonical_table[CANONICAL_IDXS] = True
         candidate = ~canonical_table[pair_matrix]
+
+        # self-loops removal
         candidate.fill_diagonal_(False)
-        candidate = pad(candidate)
+
+        # existing positive edges removal
         candidate &= ~pos_mask
 
         row, col = torch.nonzero(candidate, as_tuple=True)
@@ -105,6 +107,7 @@ def get_negative_edges(
     sample_ratio: Optional[float] = None,
     validation: bool = False,
     hard_negative_sampling: bool = False,
+    hard_negative_sampling_temperature: float = 1.0,
     model: Optional["RiNAlmoLinkPredictionModel"] = None,
     node_embeddings: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
@@ -147,7 +150,7 @@ def get_negative_edges(
             device,
             edge_losses=losses_g,
             mode=mode,
-            temperature=1.0,
+            temperature=hard_negative_sampling_temperature,
         )
         sampled.append(neg_idx_g)
 

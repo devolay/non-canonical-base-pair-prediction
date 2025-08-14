@@ -17,10 +17,13 @@ def validate_multi_input(ctx, param, value):
 
 @click.command()
 @click.option('--models', callback=validate_multi_input, required=True, help='List of model names to evaluate (e.g., rinalmo, sincfold)')
+@click.option('--model-path', type=click.Path(exists=True), default=(BASE_DIR / "models" / "model.ckpt"), help='Path to the directory containing model checkpoints')
 @click.option('--datasets', callback=validate_multi_input, required=True, help='List of dataset names to evaluate (e.g., rinalmo, sincfold)')
 @click.option('--output_dir', type=click.Path(), default=(BASE_DIR / "outputs"), required=True, help='Directory to save evaluation results')
 @click.option('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
-def main(models: List[str], datasets: List[str], output_dir: Path, device: str):
+@click.option('--threshold', type=float, default=0.5, help='Threshold for binary classification')
+@click.option('--batch-size', type=int, default=1, help='Batch size for evaluation')
+def main(models: List[str], model_path: Path, datasets: List[str], output_dir: Path, device: str, threshold: float, batch_size: int):
     device = torch.device(device)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -39,18 +42,20 @@ def main(models: List[str], datasets: List[str], output_dir: Path, device: str):
                 case 'rinalmo':
                     model = RiNAlmoLinkPredictionModel(
                         in_channels=1280,
-                        gnn_channels=[1280, 128, 128],
+                        gnn_channels=[1280, 512, 256, 128],
                         cnn_head_embed_dim=64,
                         cnn_head_num_blocks=3
                     )
                     
-                    checkpoint = torch.load(BASE_DIR / "models" / "model.ckpt", map_location=device)
+                    checkpoint = torch.load(model_path, map_location=device)
                     checkpoint['state_dict'] = {k.replace('model.', ''): v for k, v in checkpoint['state_dict'].items()}
                     model.load_state_dict(checkpoint['state_dict'])
                     outputs = eval_fn(
                         model=model,
                         dataset=dataset,
                         device=device,
+                        threshold=threshold,
+                        batch_size=batch_size,
                     )
                 case 'sincfold' | 'spotrna':
                     outputs = eval_fn(

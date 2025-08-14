@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch_geometric.nn import GATv2Conv
+from torch_geometric.nn import GAT
 from torch_geometric.utils import to_dense_batch, to_dense_adj
 
 from rinalmo.model.model import RiNALMo
@@ -10,7 +10,6 @@ from rinalmo.config import model_config
 from rinalmo.data.alphabet import Alphabet
 from rinalmo.data.constants import RNA_TOKENS
 from rinalmo.model.downstream import SecStructPredictionHead
-from pair_prediction.model.residual_block import ResidualBlock1d
 
 
 class RiNAlmoLinkPredictionModel(nn.Module):
@@ -21,7 +20,7 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         gnn_attention_heads: int = 4,
         cnn_head_embed_dim: int = 64,
         cnn_head_num_blocks: int = 2,
-        out_channels: int = 64,
+        kernel_size: int = 3,
         dropout: float = 0.0,
     ):
         """
@@ -45,15 +44,15 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         self.rna_indices = torch.tensor([self.tokenizer.get_idx(token) for token in RNA_TOKENS])
 
         self.gnn_convs = nn.ModuleList()
-        self.gnn_convs.append(GATv2Conv(in_channels, int(gnn_channels[0] / gnn_attention_heads), residual=True, heads=gnn_attention_heads))
+        self.gnn_convs.append(GAT(in_channels, gnn_channels[0], 1))
         for i in range(1, len(gnn_channels)):
-            self.gnn_convs.append(GATv2Conv(gnn_channels[i-1], int(gnn_channels[i] / gnn_attention_heads), residual=True, heads=gnn_attention_heads))
+            self.gnn_convs.append(GAT(gnn_channels[i-1], gnn_channels[i], 1))
         
         self.prediction_head = SecStructPredictionHead(
             embed_dim=gnn_channels[-1],
             num_blocks=cnn_head_num_blocks,
             conv_dim=cnn_head_embed_dim,
-            kernel_size=3
+            kernel_size=kernel_size
         )
 
 

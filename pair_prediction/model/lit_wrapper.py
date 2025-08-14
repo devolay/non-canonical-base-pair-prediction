@@ -45,6 +45,7 @@ class LitWrapper(pl.LightningModule):
         self.model_type = config.model_type
         self.negative_sample_ratio = config.negative_sample_ratio
         self.hard_negative_sampling = config.hard_negative_sampling
+        self.hard_negative_sampling_temperature = config.hard_negative_sampling_temperature
 
         self.use_scheduler = config.use_scheduler
         self.scheduler_patience = config.scheduler_patience
@@ -69,9 +70,9 @@ class LitWrapper(pl.LightningModule):
             self.model = RiNAlmoLinkPredictionModel(
                 in_channels=config.in_channels,
                 gnn_channels=config.gnn_channels,
-                out_channels=config.out_channels,
                 cnn_head_embed_dim=config.cnn_head_embed_dim,
                 cnn_head_num_blocks=config.cnn_head_num_blocks,
+                kernel_size=config.kernel_size,
                 dropout=config.dropout
             )
             self.model._load_pretrained_lm_weights(
@@ -121,7 +122,8 @@ class LitWrapper(pl.LightningModule):
 
         neg_edge_index = get_negative_edges(
             batch, validation=validation, sample_ratio=self.negative_sample_ratio, 
-            hard_negative_sampling=self.hard_negative_sampling, model=self.model, node_embeddings=node_embeddings
+            hard_negative_sampling=self.hard_negative_sampling, model=self.model, node_embeddings=node_embeddings,
+            hard_negative_sampling_temperature=self.hard_negative_sampling_temperature
         )
         neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, global_representation, batch.batch)
         neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
@@ -144,7 +146,8 @@ class LitWrapper(pl.LightningModule):
 
         neg_edge_index = get_negative_edges(
             batch, validation=validation, sample_ratio=self.negative_sample_ratio, 
-            hard_negative_sampling=self.hard_negative_sampling, model=self.model, node_embeddings=node_embeddings
+            hard_negative_sampling=self.hard_negative_sampling, model=self.model, node_embeddings=node_embeddings,
+            hard_negative_sampling_temperature=self.hard_negative_sampling_temperature
         )
         neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, batch.batch)
         neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)

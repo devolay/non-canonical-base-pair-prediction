@@ -14,6 +14,7 @@ class ModelConfig:
     # Negative Sampling
     negative_sample_ratio: int = 1
     hard_negative_sampling: bool = False
+    hard_negative_sampling_temperature: float = 1.0
     
     # Gradient Clipping
     use_gradient_clipping: bool = False
@@ -32,6 +33,7 @@ class ModelConfig:
     out_channels: int = 64
     cnn_head_embed_dim: int = 64
     cnn_head_num_blocks: int = 2
+    kernel_size: int = 3
     dropout: float = 0.0
     
     @classmethod

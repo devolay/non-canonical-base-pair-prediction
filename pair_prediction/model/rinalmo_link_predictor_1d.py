@@ -97,7 +97,7 @@ class RiNAlmoLinkPredictionModel(nn.Module):
     ) -> torch.Tensor:
         "Computes edge logits based on node embeddings."
         # Dot Product does not work well for this use-case (not sure why?)
-        # return (node_embeddings[edge_index[0]] * node_embeddings[edge_index[1]]).sum(dim=-1)
-        edge_candidate = torch.cat([node_embeddings[edge_index[0]], node_embeddings[edge_index[1]]], dim=-1)
-        return self.link_predictor(edge_candidate).squeeze(-1)
+        return (node_embeddings[edge_index[0]] * node_embeddings[edge_index[1]]).sum(dim=-1)
+        # edge_candidate = torch.cat([node_embeddings[edge_index[0]], node_embeddings[edge_index[1]]], dim=-1)
+        # return self.link_predictor(edge_candidate).squeeze(-1)
 

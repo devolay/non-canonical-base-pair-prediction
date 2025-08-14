@@ -13,7 +13,7 @@ from pair_prediction.constants import FAMILY_MAPPING_FILE, TRAIN_FAMILIES
 
 class LinkPredictionDataset(InMemoryDataset):
     def __init__(
-        self, root, transform=None, pre_transform=None, pre_filter=None, mode: str = "train"
+        self, root, transform=None, pre_transform=None, pre_filter=None, mode: str = None
     ):
         """
         Dataset for RNA graph link prediction as an InMemoryDataset.
