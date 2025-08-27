@@ -196,36 +196,9 @@ The main configuration file `configs/train-config.yaml` contains:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Citation
-
-If you use this code in your research, please cite:
-
-```bibtex
-@article{your-paper-2024,
-  title={Non-Canonical Base Pair Prediction using Deep Learning},
-  author={Your Name},
-  journal={Journal Name},
-  year={2024}
-}
-```
-
 ## Acknowledgments
 
 - RiNALMo team for the RNA language model
 - SPOT-RNA, SincFold, and Ufold developers
 - PyTorch Geometric community
-
-## Troubleshooting
-
-### Common Issues
-
-1. **CUDA out of memory**: Reduce batch size in config
-2. **RiNALMo import errors**: Ensure conda environment is activated
-3. **Missing datasets**: Check Google Drive links and download manually if needed
-
-### Getting Help
-
-- Check the [notebooks/](notebooks/) directory for examples
-- Review the configuration files for parameter explanations
-- Open an issue for bugs or feature requests
 
