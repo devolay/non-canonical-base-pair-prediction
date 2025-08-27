@@ -42,7 +42,7 @@ def main(models: List[str], model_path: Path, datasets: List[str], output_dir: P
                 case 'rinalmo':
                     model = RiNAlmoLinkPredictionModel(
                         in_channels=1280,
-                        gnn_channels=[1280, 512, 256, 128],
+                        gnn_channels=[1280, 512, 256],
                         cnn_head_embed_dim=64,
                         cnn_head_num_blocks=3
                     )
@@ -63,16 +63,12 @@ def main(models: List[str], model_path: Path, datasets: List[str], output_dir: P
                         device=device,
                     )
                 case 'ufold':
-                    results_file = output_dir / f"{model_name}_{dataset_name}" / f"{model_name}_{dataset_name}.ct"
-                    if not results_file.exists():
-                        raise FileNotFoundError(f"Expected results file {results_file} not found.")
-                    pred_dir = output_dir / f"{model_name}_{dataset_name}" / "preds"
-                    pred_dir.mkdir(parents=True, exist_ok=True)
-                    split_multi_ct(results_file, outdir=pred_dir)
+                    ct_files_output = output_dir / f"{model_name}_{dataset_name}" / f"save_ct_file"
+                    if not ct_files_output.is_dir():
+                        raise FileNotFoundError(f"Expected results directory {ct_files_output} not found.")
                     outputs = eval_fn(
                         dataset=dataset,
-                        device=device,
-                        ct_source=pred_dir,
+                        ct_source=ct_files_output,
                     )
 
             collect_and_save_metrics(outputs, output_dir / f"{model_name}_{dataset_name}")

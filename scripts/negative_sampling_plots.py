@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
+from matplotlib.colors import LinearSegmentedColormap  # NEW
 
 from torch_geometric.data import Batch
 
@@ -14,10 +15,19 @@ from pair_prediction.model.rinalmo_link_predictor_2d import RiNAlmoLinkPredictio
 from pair_prediction.model.utils import enumerate_negative_candidates
 
 
+# --- Your palette (hex) ---
+PALETTE = [
+    "#001219", "#005f73", "#0a9396", "#94d2bd", "#e9d8a6",
+    "#ee9b00", "#ca6702", "#bb3e03", "#ae2012", "#9b2226"
+]
+# Continuous colormap for heatmaps
+CMAP_CONT = LinearSegmentedColormap.from_list("custom_nc", PALETTE, N=256)
+
+
 def load_model(ckpt_path: pathlib.Path, device: torch.device) -> RiNAlmoLinkPredictionModel:
     model = RiNAlmoLinkPredictionModel(
         in_channels=1280,
-        gnn_channels=[1280, 512, 256, 128],
+        gnn_channels=[1280, 512, 256],
         cnn_head_embed_dim=64,
         cnn_head_num_blocks=3,
     )
@@ -64,10 +74,10 @@ def plot_single_graph(
 
     step = 1 if L <= 50 else max(1, L // 50)
 
+    # ---- Heatmap (uses your palette) ----
     fig_h, ax_h = plt.subplots(figsize=(8, 8), dpi=350)
 
-    im = ax_h.imshow(heat, cmap="viridis", origin="upper")
-    ax_h.set_title("Negative-edge BCE loss heat-map", pad=12)
+    im = ax_h.imshow(heat, cmap=CMAP_CONT, origin="upper")
     ax_h.set_xlabel("Node j  (sequence order)")
     ax_h.set_ylabel("Node i  (sequence order)")
 
@@ -83,18 +93,21 @@ def plot_single_graph(
     fig_h.savefig(f"{batch.id}_heatmap.png", dpi=350)
     plt.close(fig_h)
 
-
+    # ---- Histogram + sampling prob (use palette colors) ----
     fig_d, ax1 = plt.subplots(figsize=(10, 5), dpi=350)
 
-    ax1.hist(losses, bins=80, density=True, alpha=0.65, label="Loss density")
+    # Bars: pick a mid palette color; Line: a contrasting palette color
+    bar_color = PALETTE[2]   # teal
+    line_color = PALETTE[7]  # brick
+
+    ax1.hist(losses, bins=80, density=True, alpha=0.65, color=bar_color, label="Loss density")
     ax1.set_xlabel("Per-edge BCE loss")
     ax1.set_ylabel("Density")
-    ax1.set_title("Loss distribution vs. sampling probability")
     ax1.grid(True, linestyle="--", linewidth=0.4, alpha=0.4)
 
     ax2 = ax1.twinx()
     idx = np.argsort(losses)
-    ax2.plot(losses[idx], probs[idx], color="tab:red", label=f"Sampling probability (T={temperature})")
+    ax2.plot(losses[idx], probs[idx], color=line_color, label=f"Sampling probability (T={temperature})")
     ax2.set_ylabel("Sampling probability")
     ax2.set_ylim(0, probs.max() * 1.1)
 
@@ -127,7 +140,7 @@ def main(args: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Plot losses for one validation graph.")
     p.add_argument("--data-root", type=str, default=str(BASE_DIR / "data"))
-    p.add_argument("--checkpoint", type=str, required=True, help="Path to model .ckpt")
+    p.add_argument("--checkpoint", type=str, default="/home/inf141171/non-canonical-base-pair-prediction/models/model.ckpt", help="Path to model .ckpt")
     p.add_argument("--graph-idx", type=int, default=0, help="Which validation graph to plot")
     p.add_argument("--temperature", type=float, default=1.0, help="Soft-max temperature")
     return p

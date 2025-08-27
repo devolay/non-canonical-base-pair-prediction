@@ -76,10 +76,12 @@ def sincfold_eval(
             all_edge_index = torch.concatenate([pos_edge_index, neg_edge_index], axis=1)
             all_labels = torch.concatenate([pos_labels, neg_labels], axis=0)
 
-            all_edge_index = to_dense_adj(all_edge_index, batch=data.batch).squeeze(0)
-            all_logits = pred_logits[all_edge_index.bool()]
+            rows = all_edge_index[0].cpu().numpy()
+            cols = all_edge_index[1].cpu().numpy()
+
+            all_logits = pred_logits[rows, cols]
             probabilities = torch.sigmoid(all_logits)
-            predictions = (probabilities > 0.5)
+            predictions = probabilities > 0.5
 
             outputs.append({
                 "id": seq_id,

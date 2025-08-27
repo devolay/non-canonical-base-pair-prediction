@@ -90,16 +90,9 @@ def ufold_eval(
     Returns a list of dicts with the *same* keys as `sincfold_eval`, so any
     downstream metric/plot code keeps working.
     """
-    ct_source = Path(ct_source)
+    ct_dir = Path(ct_source)
     tmp_dir: Path | None = None        
     try:
-        if ct_source.is_dir():
-            ct_dir = ct_source
-        else:
-            tmp_dir = Path(mkdtemp(prefix="ct_eval_"))
-            split_multi_ct(ct_source, outdir=tmp_dir)
-            ct_dir = tmp_dir
-
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
         outputs = []
 
@@ -110,10 +103,10 @@ def ufold_eval(
 
                 ct_file = ct_dir / f"{seq_id}.ct"
                 if not ct_file.exists():
-                    print(f"[WARN] CT file for {seq_id} not found – skipping.")
-                    continue
-
-                ct_mat = torch.from_numpy(read_ct(ct_file)).float()
+                    # mock CT mat for sequences without a CT file
+                    ct_mat = torch.zeros((len(seq), len(seq)), dtype=np.int8)
+                else:
+                    ct_mat = torch.from_numpy(read_ct(ct_file)).float()
 
                 edge_types      = np.concatenate(data.edge_type)
                 edge_index      = data.edge_index
@@ -128,9 +121,10 @@ def ufold_eval(
                 all_edge_index  = torch.cat([pos_edge_index, neg_edge_index], dim=1)
                 all_labels      = torch.cat([pos_labels,    neg_labels],    dim=0)
 
-                edge_mask = to_dense_adj(all_edge_index, batch=data.batch).squeeze(0).bool()
-                probabilities = ct_mat[edge_mask] 
-                predictions   = probabilities.bool()
+                rows = all_edge_index[0].to(dtype=torch.long).cpu()
+                cols = all_edge_index[1].to(dtype=torch.long).cpu()
+                probabilities = ct_mat[rows, cols]
+                predictions   = (probabilities > 0.5)
 
                 outputs.append({
                     "data":          data,

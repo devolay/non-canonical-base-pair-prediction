@@ -1,7 +1,7 @@
 from typing import Tuple, Optional, List
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, roc_curve, auc
+from sklearn.metrics import confusion_matrix, roc_curve, auc, precision_recall_curve, average_precision_score
 
 
 def plot_confusion_matrix(
@@ -61,6 +61,21 @@ def plot_roc_curve(
     ax.legend(loc="lower right")
     return fig, ax
 
+def plot_pr_curve(
+    labels: np.ndarray,
+    probabilities: np.ndarray,
+    title: str = "Precision-Recall Curve"
+) -> Tuple[plt.Figure, plt.Axes]:
+    precision, recall, _ = precision_recall_curve(labels, probabilities)
+    auprc = average_precision_score(labels, probabilities)
+    fig_pr, ax_pr = plt.subplots()
+    ax_pr.step(recall, precision, where="post")
+    ax_pr.set_xlabel("Recall")
+    ax_pr.set_ylabel("Precision")
+    ax_pr.set_title(f"Precision–Recall Curve (AUPRC = {auprc:.4f})")
+    ax_pr.set_xlim([0.0, 1.0])
+    ax_pr.set_ylim([0.0, 1.05])
+    return fig_pr, ax_pr
 
 def plot_probability_distribution(
     labels: np.ndarray,

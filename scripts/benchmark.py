@@ -2,14 +2,16 @@ import os
 import gc
 import time
 import argparse
+import numpy as np
 from pathlib import Path
 from contextlib import nullcontext
 
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
-
+from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
+from torch_geometric.data import Batch as PyGBatch
 
 from pair_prediction.config import ModelConfig
 from pair_prediction.model.lit_wrapper import LitWrapper
@@ -34,15 +36,12 @@ def unwrap_optimizers(opt_cfg):
     This tries to robustly extract the optimizer(s). We use the first one.
     """
     if isinstance(opt_cfg, (list, tuple)):
-        # [opt], (opt,), ([opt], [sched]), etc.
         first = opt_cfg[0]
         if isinstance(first, (list, tuple)):
             return first[0]
         return first
     if isinstance(opt_cfg, dict):
-        # {'optimizer': opt, ...}
         return opt_cfg.get("optimizer", None)
-    # plain optimizer
     return opt_cfg
 
 @torch.no_grad()
@@ -56,7 +55,7 @@ def measure_inference(model: nn.Module, batch, precision: str, warmup_steps=3, m
     # Warmup
     for _ in range(warmup_steps):
         with amp_ctx:
-            _ = model.forward(batch)
+            _ = model._common_step(batch)
 
     # Timed/Measured
     starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
@@ -66,7 +65,7 @@ def measure_inference(model: nn.Module, batch, precision: str, warmup_steps=3, m
     for _ in range(measure_steps):
         starter.record()
         with amp_ctx:
-            _ = model.forward(batch)
+            _ = model._common_step(batch)
         ender.record()
         torch.cuda.synchronize()
         total_ms += starter.elapsed_time(ender)
@@ -81,7 +80,6 @@ def measure_train_step(model: nn.Module, batch, precision: str):
     model.train()
     amp_ctx, _ = get_amp_ctx(precision)
 
-    # Configure optimizer from LightningModule
     opt_cfg = model.configure_optimizers()
     optimizer = unwrap_optimizers(opt_cfg)
     assert optimizer is not None, "Could not unwrap optimizer from LitWrapper.configure_optimizers()"
@@ -93,7 +91,6 @@ def measure_train_step(model: nn.Module, batch, precision: str):
 
     optimizer.zero_grad(set_to_none=True)
     with amp_ctx:
-        # Lightning-style: training_step returns a loss tensor
         loss = model.training_step(batch, batch_idx=0)
     if isinstance(loss, dict):
         loss = loss["loss"]
@@ -112,50 +109,124 @@ def build_single_batch(dset, batch_size, device):
     batch = next(iter(loader))
     return batch.to(device)
 
-def benchmark(config_path: str,
-              batch_sizes=(1, 2, 4, 8, 16),
-              precisions=("fp32", "fp16", "bf16"),
-              device="cuda",
-              warmup_steps=3,
-              measure_steps=10):
+def tile_graph(data: Data, k: int) -> Data:
+    out = data.clone()
+
+    edge_index = data.edge_index
+    num_nodes = data.num_nodes
+
+    edge_blocks = []
+    edge_type_blocks = []
+    features_blocks = []
+    for i in range(k):
+        offset = i * num_nodes
+        edge_blocks.append(edge_index + offset)
+        edge_type_blocks.extend(data.edge_type)
+        features_blocks.append(data.features)
+
+    out.edge_index = torch.cat(edge_blocks, dim=1)
+    out.edge_type = np.array([edge_type_blocks])
+    out.features = torch.cat(features_blocks, dim=1)
+    out.seq = out.seq * k
+    out.id = f"{out.id}_x{k}"
+    
+    breakpoint()
+    return out
+
+
+def build_length_scaled_batch(dset, base_index: int, k: int, device):
+    """Take one sample from dataset and tile it k times into a single longer graph."""
+    base = dset[base_index]
+    big = tile_graph(base, k)
+    return DataLoader([big], batch_size=1, shuffle=False, num_workers=0).dataset[0].to(device)
+
+
+def benchmark(
+    config_path: str,
+    batch_sizes=(1, 2, 4, 8, 16),
+    precisions=("fp32", "fp16", "bf16"),
+    device="cuda",
+    warmup_steps=3,
+    measure_steps=10,
+    length_multipliers=(1, 2, 4, 8),
+    length_base_idx=0,
+    length_batch_size=1
+):
     cudnn.benchmark = True
     device = torch.device(device)
 
     cfg = ModelConfig.from_yaml(config_path)
-
-    # Datasets for getting realistic batches (no need for full loaders here)
     data_root = Path("data/")
     train_ds = LinkPredictionDataset(root=data_root, mode="train")
 
     results = []
+
+    # for prec in precisions:
+    #     for bs in batch_sizes:
+    #         gc.collect()
+    #         if torch.cuda.is_available():
+    #             torch.cuda.empty_cache()
+    #             torch.cuda.reset_peak_memory_stats()
+
+    #         model = LitWrapper(cfg).to(device)
+    #         batch = build_single_batch(train_ds, bs, device)
+
+    #         inf = measure_inference(model, batch, precision=prec,
+    #                                 warmup_steps=warmup_steps, measure_steps=measure_steps)
+    #         trn = measure_train_step(model, batch, precision=prec)
+
+    #         # Estimate per-graph sequence length (assume uniform in batch)
+    #         try:
+    #             # If batch stores 'features' per node and 'batch' assignment per node:
+    #             L_est = int((batch.features.shape[0] if hasattr(batch, "features") else batch.x.shape[0]) / bs)
+    #         except Exception:
+    #             L_est = None
+
+    #         results.append({
+    #             "mode": "batch",
+    #             "precision": prec,
+    #             "batch_size": bs,
+    #             "seq_length": L_est,
+    #             **inf, **trn
+    #         })
+
+    #         del model, batch
+    #         gc.collect()
+    #         if torch.cuda.is_available():
+    #             torch.cuda.empty_cache()
+
     for prec in precisions:
-        for bs in batch_sizes:
-            # Garbage-collect and empty cache between settings to stabilize peaks
+        for k in length_multipliers:
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.reset_peak_memory_stats()
 
-            # Model fresh per setting (important for clean optimizer/memory state)
             model = LitWrapper(cfg).to(device)
-
-            # Build one batch of size bs
-            batch = build_single_batch(train_ds, bs, device)
-
-            # Inference measure
-            inf = measure_inference(model, batch, precision=prec,
-                                    warmup_steps=warmup_steps, measure_steps=measure_steps)
-            # Training measure (one optimizer step)
+            batch = build_length_scaled_batch(train_ds, base_index=length_base_idx, k=k, device=device)
+            inf = measure_inference(model, batch, precision=prec, warmup_steps=warmup_steps, measure_steps=measure_steps)
             trn = measure_train_step(model, batch, precision=prec)
 
+            try:
+                total_nodes = len(batch.seq[0])
+                if hasattr(batch, "batch"):  
+                    n_graphs = int(batch.batch.max().item() + 1)
+                    L_long = int(total_nodes // n_graphs)
+                else:
+                    L_long = int(total_nodes)
+            except Exception:
+                L_long = None
+
             results.append({
+                "mode": "length_scale",
                 "precision": prec,
-                "batch_size": bs,
-                **inf,
-                **trn
+                "batch_size": int(length_batch_size),
+                "seq_length": L_long,
+                "length_multiplier": k,
+                "base_index": int(length_base_idx),
+                **inf, **trn
             })
 
-            # Cleanup model to reduce interaction across loops
             del model, batch
             gc.collect()
             if torch.cuda.is_available():
@@ -165,13 +236,20 @@ def benchmark(config_path: str,
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", required=True, type=str, help="Path to YAML config.")
-    ap.add_argument("--batch-sizes", type=int, nargs="+", default=[1, 2, 4, 8, 16, 32])
-    ap.add_argument("--precisions", type=str, nargs="+", default=["fp32", "fp16", "bf16"])
+    ap.add_argument("--config", default="/home/inf141171/non-canonical-base-pair-prediction/configs/train-config.yaml", type=str, help="Path to YAML config.")
+    ap.add_argument("--batch-sizes", type=int, nargs="+", default=[2, 8, 32, 64, 128, 256, 512])
+    ap.add_argument("--precisions", type=str, nargs="+", default=["fp16", "bf16"])
     ap.add_argument("--warmup-steps", type=int, default=3)
     ap.add_argument("--measure-steps", type=int, default=10)
     ap.add_argument("--device", type=str, default="cuda")
     ap.add_argument("--out", type=str, default="bench_results.csv")
+    # NEW args for length scaling
+    ap.add_argument("--length-multipliers", type=int, nargs="+", default=[1, 2, 4, 8, 16],
+                    help="Repeat the base graph k times to create longer sequences.")
+    ap.add_argument("--length-base-idx", type=int, default=0,
+                    help="Index of dataset sample to tile for length scaling.")
+    ap.add_argument("--length-batch-size", type=int, default=1,
+                    help="Batch size used during length scaling (usually 1).")
     args = ap.parse_args()
 
     assert torch.cuda.is_available(), "CUDA required for this benchmark."
@@ -183,6 +261,9 @@ def main():
         device=args.device,
         warmup_steps=args.warmup_steps,
         measure_steps=args.measure_steps,
+        length_multipliers=tuple(args.length_multipliers),
+        length_base_idx=args.length_base_idx,
+        length_batch_size=args.length_batch_size,
     )
 
     import pandas as pd

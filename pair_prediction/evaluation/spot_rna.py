@@ -88,15 +88,17 @@ def spotrna_eval(
             all_edge_index = torch.concatenate([pos_edge_index, neg_edge_index], axis=1)
             all_labels = torch.concatenate([pos_labels, neg_labels], axis=0)
 
-            all_edge_index = to_dense_adj(all_edge_index, batch=data.batch).squeeze(0)
-            all_edge_index_preds = pred[all_edge_index.bool()] > SPOTRNA_THRESHOLD
+            rows = all_edge_index[0].cpu().numpy()
+            cols = all_edge_index[1].cpu().numpy()
+            all_scores = pred[rows, cols]
+            all_preds = (all_scores >= SPOTRNA_THRESHOLD)  
 
             outputs.append({
                 "id": seq_id,
                 "seq": data.seq[0],
-                "preds": torch.from_numpy(all_edge_index_preds),
+                "preds": torch.from_numpy(all_preds.astype(np.float32)),
                 "labels": all_labels,
-                "probabilities": torch.from_numpy(pred[all_edge_index.bool()]),
+                "probabilities": torch.from_numpy(all_scores.astype(np.float32)),
                 "edge_types": edge_types,
                 "pair_types": data.pair_type,
             })

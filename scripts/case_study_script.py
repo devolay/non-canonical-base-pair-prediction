@@ -104,9 +104,9 @@ def evaluate_case_study_stats(
         n_non_per_g = defaultdict(int)
         for et, g in zip(edge_type_all, gt_graph_ids):
             if et == "canonical":
-                n_can_per_g[g] += 1
+                n_can_per_g[g] += 0.5
             elif et == "non-canonical":
-                n_non_per_g[g] += 1
+                n_non_per_g[g] += 0.5
 
         # Nucleotides per graph
         n_nodes_per_g = _node_counts_by_graph(node_to_graph)
@@ -116,12 +116,12 @@ def evaluate_case_study_stats(
         tn_per_g = defaultdict(int); fp_per_g = defaultdict(int)
 
         for g, pred in zip(pos_graph_ids.tolist(), pos_preds.tolist()):
-            if pred: tp_per_g[g] += 1
-            else:    fn_per_g[g] += 1
+            if pred: tp_per_g[g] += 0.5
+            else:    fn_per_g[g] += 0.5
 
         for g, pred in zip(neg_graph_ids.tolist(), neg_preds.tolist()):
-            if pred: fp_per_g[g] += 1
-            else:    tn_per_g[g] += 1
+            if pred: fp_per_g[g] += 0.5
+            else:    tn_per_g[g] += 0.5
 
         # Predicted non-canonical per graph (predicted positives across pos+neg)
         pred_non_per_g = defaultdict(int)
@@ -133,7 +133,10 @@ def evaluate_case_study_stats(
         # Emit records
         graphs_in_batch = set(n_nodes_per_g.keys())
         for g in sorted(graphs_in_batch):
-            tp = tp_per_g[g]; tn = tn_per_g[g]; fp = fp_per_g[g]; fn = fn_per_g[g]
+            tp = int(tp_per_g[g])
+            tn = int(tn_per_g[g]) 
+            fp = int(fp_per_g[g]) 
+            fn = int(fn_per_g[g])
             prec, rec, f1 = _compute_prf1(tp, fp, fn)
             meta = _extract_graph_meta(batch, g)
 
@@ -173,7 +176,7 @@ def _write_csv(path: str, rows: List[Dict[str, Any]]):
 def main(argv: Optional[List[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Per-graph case-study stats (Top-K best / Bottom-K worst by F1).")
     p.add_argument("--batch-size", type=int, default=1, help="Eval batch size.")
-    p.add_argument("--model-path", type=str, default="/workspace/non-canonical-base-pair-prediction/models/model.ckpt",)
+    p.add_argument("--model-path", type=str, default="/home/inf141171/non-canonical-base-pair-prediction/models/model.ckpt",)
     p.add_argument("--threshold", type=float, default=0.5, help="Sigmoid threshold for positive class.")
     p.add_argument("--out-csv", type=str, default=None, help="Path to write ALL results as CSV.")
     p.add_argument("--out-json", type=str, default=None, help="Path to write ALL results as JSON.")
@@ -202,7 +205,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = RiNAlmoLinkPredictionModel(
         in_channels=1280,
-        gnn_channels=[1280, 512, 256, 128],
+        gnn_channels=[1280, 512, 256],
         cnn_head_embed_dim=64,
         cnn_head_num_blocks=3
     )
