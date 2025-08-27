@@ -5,7 +5,7 @@ from typing import List
 
 from pair_prediction.evaluation import EVAL_FUNCTIONS, collect_and_save_metrics
 from pair_prediction.evaluation.ufold import split_multi_ct
-from pair_prediction.model.rinalmo_link_predictor_2d import RiNAlmoLinkPredictionModel
+from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
 from pair_prediction.data.utils import load_dataset
 from pair_prediction.constants import BASE_DIR
 

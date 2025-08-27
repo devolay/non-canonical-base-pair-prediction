@@ -2,10 +2,8 @@ import torch
 import numpy as np
 import pickle
 from tqdm import tqdm
-from pathlib import Path
 from typing import Any, List, Dict
 
-from torch_geometric.utils import to_dense_adj
 from torch_geometric.loader import DataLoader
 
 from sincfold import pred as sincfold_predict

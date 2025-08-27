@@ -11,7 +11,7 @@ from sklearn.metrics import (
 )
 
 from pair_prediction.model.model import LinkPredictorModel
-from pair_prediction.model.rinalmo_link_predictor_2d import RiNAlmoLinkPredictionModel
+from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
 from pair_prediction.model.global_model import LinkPredictorGlobalModel
 from pair_prediction.model.utils import get_negative_edges, sample_negative_edges
 from pair_prediction.config import ModelConfig
@@ -21,6 +21,7 @@ from pair_prediction.visualization.metrics import (
     plot_probability_distribution,
     plot_non_canonical_pair_accuracy,
 )
+from pair_prediction.constants import BASE_DIR
 
 from rinalmo.data.alphabet import Alphabet
 
@@ -76,7 +77,7 @@ class LitWrapper(pl.LightningModule):
                 dropout=config.dropout
             )
             self.model._load_pretrained_lm_weights(
-                "/home/inf141171/non-canonical-base-pair-prediction/models/rinalmo/rinalmo_giga_pretrained.pt",
+                BASE_DIR / "models" / "rinalmo" / "rinalmo_giga_pretrained.pt",
                 freeze_lm=config.freeze_embeddings
             )
             self.tokenizer = Alphabet()

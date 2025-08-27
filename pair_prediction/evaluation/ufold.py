@@ -4,12 +4,10 @@ import re
 import numpy as np
 import torch
 from torch_geometric.loader import DataLoader
-from torch_geometric.utils import to_dense_adj
 from tqdm import tqdm
 
 from pathlib import Path
 from shutil import rmtree
-from tempfile import mkdtemp
 from typing import List, Dict, Any
 
 from pathlib import Path
@@ -83,13 +81,6 @@ def ufold_eval(
     ct_source: str | Path,
     **kwargs
 ) -> List[Dict[str, Any]]:
-    """
-    Evaluate link-prediction performance when the “predictions” are the base pairs
-    contained in CT files (e.g. computed by RNAstructure, ViennaRNA, IPknot, …).
-
-    Returns a list of dicts with the *same* keys as `sincfold_eval`, so any
-    downstream metric/plot code keeps working.
-    """
     ct_dir = Path(ct_source)
     tmp_dir: Path | None = None        
     try:
@@ -103,7 +94,6 @@ def ufold_eval(
 
                 ct_file = ct_dir / f"{seq_id}.ct"
                 if not ct_file.exists():
-                    # mock CT mat for sequences without a CT file
                     ct_mat = torch.zeros((len(seq), len(seq)), dtype=np.int8)
                 else:
                     ct_mat = torch.from_numpy(read_ct(ct_file)).float()

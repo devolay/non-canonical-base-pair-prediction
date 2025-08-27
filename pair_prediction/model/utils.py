@@ -6,15 +6,9 @@ from typing import Optional, List, Tuple
 from torch_geometric.data import Data
 from torch_geometric.utils import to_dense_adj, dense_to_sparse
 
-from pair_prediction.model.rinalmo_link_predictor_2d import RiNAlmoLinkPredictionModel
+from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
 
 BASE2IDX = {'A': 0, 'C': 1, 'G': 2, 'U': 3}
-PAIR2IDX = {
-    'AA': 0, 'AC': 1, 'AG': 2, 'AU': 3,
-    'CA': 4, 'CC': 5, 'CG': 6, 'CU': 7,
-    'GA': 8, 'GC': 9, 'GG': 10, 'GU': 11,
-    'UA': 12, 'UC': 13, 'UG': 14, 'UU': 15
-}
 CANONICAL_IDXS = [3, 6, 9, 12, 11, 14] 
 
 def create_pair_matrix(seq: str, device=None):
@@ -114,25 +108,21 @@ def get_negative_edges(
     """
     Return a (possibly sampled) negative-edge tensor for the mini-batch.
     """
-    # 1. full pool  ────────────────────────────────────────────────────────────
     edge_idx_all, graph_ids = enumerate_negative_candidates(batched_data)
 
-    # If no sampling requested (ratio=None) or running validation → done
     if sample_ratio is None or validation:
         return edge_idx_all
 
-    # 2. score once for *all* negatives  ───────────────────────────────────────
     edge_losses_all = None
     if hard_negative_sampling:
         if model is None or node_embeddings is None:
             raise ValueError("hard_negative_sampling=True requires `model` and ""`node_embeddings`.")
-        with torch.no_grad():  # logits used only for sampling
+        with torch.no_grad():
             logits = model.compute_edge_logits(node_embeddings, edge_idx_all, batched_data.batch)
         edge_losses_all = F.binary_cross_entropy_with_logits(
             logits, torch.zeros_like(logits), reduction="none"
         )
 
-    # 3. per-graph sampling  ──────────────────────────────────────────────────
     sampled: List[torch.Tensor] = []
     num_graphs = batched_data.ptr.numel() - 1
     device = batched_data.batch.device

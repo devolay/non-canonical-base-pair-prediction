@@ -3,12 +3,13 @@ log_neptune: True
 
 batch_size: 512
 epochs: 500
-lr: 0.00001
+lr: 0.0001
 min_lr: 0.00000001
 
 # Negative Sampling
 negative_sample_ratio: 8
 hard_negative_sampling: True
+hard_negative_sampling_temperature: 0.1
 
 # Gradient Clipping
 use_gradient_clipping: False
@@ -17,18 +18,18 @@ gradient_clip_algorithm: value
 
 # Scheduler
 use_scheduler: True
-scheduler_patience: 10
+scheduler_patience: 25
 
 # Architecture
 model_type: rinalmo
-freeze_embeddings: False
+freeze_embeddings: True
 in_channels: 1280
 gnn_channels:
+  - 1280
   - 512
   - 256
-  - 256
-  - 128
-out_channels: 128
+out_channels: 256
 cnn_head_embed_dim: 64
-cnn_head_num_blocks: 2
+cnn_head_num_blocks: 3
+kernel_size: 3
 dropout: 0.2

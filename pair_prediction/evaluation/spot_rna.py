@@ -4,9 +4,7 @@ import numpy as np
 import subprocess
 from tqdm import tqdm
 from typing import List, Dict, Any
-from pathlib import Path
 
-from torch_geometric.utils import to_dense_adj
 from torch_geometric.loader import DataLoader
 
 from pair_prediction.constants import BASE_DIR

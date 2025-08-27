@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch_geometric.nn import GAT, GATConv
+from torch_geometric.nn import GATConv
 from torch_geometric.utils import to_dense_batch, to_dense_adj
 
 from rinalmo.model.model import RiNALMo
@@ -24,17 +24,15 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         dropout: float = 0.0,
     ):
         """
+        Link prediction model using RiNALMo embeddings and a GNN encoder.
         Args:
-            in_channels (int): Number of input node features.
-            gnn_channels (list of int): Hidden channel sizes for the GNN encoder layers.
-                For example, [64, 64] creates a GNN with two layers:
-                - First layer: input in_channels, output 64.
-                - Second layer: input 64, output 64.
-            cnn_channels (list of int): Hidden channel sizes for the CNN encoder layers.
-                For example, [64, 64] creates a CNN with two residual blocks:
-                - First block: input in_channels, output 64.
-                - Second block: input 64, output 64.
-            dropout (float): Dropout probability.
+            in_channels (int): Input feature dimension for each node.
+            gnn_channels (list): List of output dimensions for each GNN layer.
+            gnn_attention_heads (int): Number of attention heads in GATConv layers.
+            cnn_head_embed_dim (int): Embedding dimension for the CNN prediction head.
+            cnn_head_num_blocks (int): Number of convolutional blocks in the CNN prediction head.
+            kernel_size (int): Kernel size for the CNN prediction head.
+            dropout (float): Dropout rate for regularization.
         """
         super().__init__()
         self.dropout = dropout
@@ -57,10 +55,12 @@ class RiNAlmoLinkPredictionModel(nn.Module):
 
 
     def _load_pretrained_lm_weights(self, pretrained_weights_path: str, freeze_lm: bool = True):
+        """Load pretrained RiNALMo weights and optionally freeze the LM parameters."""
         self.rinalmo.load_state_dict(torch.load(pretrained_weights_path))
         if freeze_lm:
             for param in self.rinalmo.parameters():
                 param.requires_grad = False
+
         
     def forward(self, x: torch.Tensor, tokens: torch.Tensor, edge_index: torch.Tensor):
         """
@@ -75,7 +75,6 @@ class RiNAlmoLinkPredictionModel(nn.Module):
             
         Returns:
             node_embeddings (torch.Tensor): Output from GNN encoder.
-            global_reps (torch.Tensor): Global representations from CNN encoder.
         """
         node_embeddings = self.rinalmo(tokens)["representation"]
         nucleotide_mask = torch.isin(tokens, self.rna_indices.to(tokens.device))

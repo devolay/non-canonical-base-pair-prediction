@@ -33,6 +33,7 @@ def draw_rna_structure(seq: str, amt_matrix: np.ndarray, save_path: str = None):
     plt.figure(figsize=(10, 10))
     nx.draw_networkx_edges(G, pos, edge_color=edge_colors, edgelist=G.edges())
     nx.draw_networkx_edges(G, pos, edgelist=sequence_edges, edge_color="gray", style="dashed")
+    
     # Add legend
     canonical_edge = plt.Line2D([0], [0], color="black", lw=2)
     non_canonical_edge = plt.Line2D([0], [0], color="orange", lw=2)

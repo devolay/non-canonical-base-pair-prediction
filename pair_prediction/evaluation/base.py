@@ -6,7 +6,7 @@ from typing import Any, List, Dict
 from torch_geometric.loader import DataLoader
 
 from pair_prediction.data.dataset import LinkPredictionDataset
-from pair_prediction.model.rinalmo_link_predictor_2d import RiNAlmoLinkPredictionModel
+from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
 from pair_prediction.model.utils import get_negative_edges
 
 

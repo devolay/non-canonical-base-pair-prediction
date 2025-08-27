@@ -1,6 +1,5 @@
-import os
 import gc
-import time
+import pandas as pd
 import argparse
 import numpy as np
 from pathlib import Path
@@ -16,6 +15,7 @@ from torch_geometric.data import Batch as PyGBatch
 from pair_prediction.config import ModelConfig
 from pair_prediction.model.lit_wrapper import LitWrapper
 from pair_prediction.data.dataset import LinkPredictionDataset
+from pair_prediction.constants import BASE_DIR
 
 
 def get_amp_ctx(precision: str):
@@ -130,7 +130,6 @@ def tile_graph(data: Data, k: int) -> Data:
     out.seq = out.seq * k
     out.id = f"{out.id}_x{k}"
     
-    breakpoint()
     return out
 
 
@@ -148,9 +147,6 @@ def benchmark(
     device="cuda",
     warmup_steps=3,
     measure_steps=10,
-    length_multipliers=(1, 2, 4, 8),
-    length_base_idx=0,
-    length_batch_size=1
 ):
     cudnn.benchmark = True
     device = torch.device(device)
@@ -161,69 +157,30 @@ def benchmark(
 
     results = []
 
-    # for prec in precisions:
-    #     for bs in batch_sizes:
-    #         gc.collect()
-    #         if torch.cuda.is_available():
-    #             torch.cuda.empty_cache()
-    #             torch.cuda.reset_peak_memory_stats()
-
-    #         model = LitWrapper(cfg).to(device)
-    #         batch = build_single_batch(train_ds, bs, device)
-
-    #         inf = measure_inference(model, batch, precision=prec,
-    #                                 warmup_steps=warmup_steps, measure_steps=measure_steps)
-    #         trn = measure_train_step(model, batch, precision=prec)
-
-    #         # Estimate per-graph sequence length (assume uniform in batch)
-    #         try:
-    #             # If batch stores 'features' per node and 'batch' assignment per node:
-    #             L_est = int((batch.features.shape[0] if hasattr(batch, "features") else batch.x.shape[0]) / bs)
-    #         except Exception:
-    #             L_est = None
-
-    #         results.append({
-    #             "mode": "batch",
-    #             "precision": prec,
-    #             "batch_size": bs,
-    #             "seq_length": L_est,
-    #             **inf, **trn
-    #         })
-
-    #         del model, batch
-    #         gc.collect()
-    #         if torch.cuda.is_available():
-    #             torch.cuda.empty_cache()
-
     for prec in precisions:
-        for k in length_multipliers:
+        for bs in batch_sizes:
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.reset_peak_memory_stats()
 
             model = LitWrapper(cfg).to(device)
-            batch = build_length_scaled_batch(train_ds, base_index=length_base_idx, k=k, device=device)
-            inf = measure_inference(model, batch, precision=prec, warmup_steps=warmup_steps, measure_steps=measure_steps)
+            batch = build_single_batch(train_ds, bs, device)
+
+            inf = measure_inference(model, batch, precision=prec,
+                                    warmup_steps=warmup_steps, measure_steps=measure_steps)
             trn = measure_train_step(model, batch, precision=prec)
 
             try:
-                total_nodes = len(batch.seq[0])
-                if hasattr(batch, "batch"):  
-                    n_graphs = int(batch.batch.max().item() + 1)
-                    L_long = int(total_nodes // n_graphs)
-                else:
-                    L_long = int(total_nodes)
+                L_est = int((batch.features.shape[0] if hasattr(batch, "features") else batch.x.shape[0]) / bs)
             except Exception:
-                L_long = None
+                L_est = None
 
             results.append({
-                "mode": "length_scale",
+                "mode": "batch",
                 "precision": prec,
-                "batch_size": int(length_batch_size),
-                "seq_length": L_long,
-                "length_multiplier": k,
-                "base_index": int(length_base_idx),
+                "batch_size": bs,
+                "seq_length": L_est,
                 **inf, **trn
             })
 
@@ -236,20 +193,13 @@ def benchmark(
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="/home/inf141171/non-canonical-base-pair-prediction/configs/train-config.yaml", type=str, help="Path to YAML config.")
+    ap.add_argument("--config", default=BASE_DIR / "configs" / "train-config.yaml", type=str, help="Path to YAML config.")
     ap.add_argument("--batch-sizes", type=int, nargs="+", default=[2, 8, 32, 64, 128, 256, 512])
     ap.add_argument("--precisions", type=str, nargs="+", default=["fp16", "bf16"])
     ap.add_argument("--warmup-steps", type=int, default=3)
     ap.add_argument("--measure-steps", type=int, default=10)
     ap.add_argument("--device", type=str, default="cuda")
     ap.add_argument("--out", type=str, default="bench_results.csv")
-    # NEW args for length scaling
-    ap.add_argument("--length-multipliers", type=int, nargs="+", default=[1, 2, 4, 8, 16],
-                    help="Repeat the base graph k times to create longer sequences.")
-    ap.add_argument("--length-base-idx", type=int, default=0,
-                    help="Index of dataset sample to tile for length scaling.")
-    ap.add_argument("--length-batch-size", type=int, default=1,
-                    help="Batch size used during length scaling (usually 1).")
     args = ap.parse_args()
 
     assert torch.cuda.is_available(), "CUDA required for this benchmark."
@@ -261,12 +211,8 @@ def main():
         device=args.device,
         warmup_steps=args.warmup_steps,
         measure_steps=args.measure_steps,
-        length_multipliers=tuple(args.length_multipliers),
-        length_base_idx=args.length_base_idx,
-        length_batch_size=args.length_batch_size,
     )
 
-    import pandas as pd
     df = pd.DataFrame(results)
     print(df)
     df.to_csv(args.out, index=False)

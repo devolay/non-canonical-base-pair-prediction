@@ -129,18 +129,14 @@ def plot_non_canonical_pair_accuracy(
     """
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    # Get the number of positive edges from the original batch
     num_pos_edges = len(edge_types)
     
-    # Only consider positive pairs (true non-canonical pairs)
     positive_mask = labels[:num_pos_edges] == 1
     non_canonical_mask = edge_types == 'non-canonical'
     positive_non_canonical_mask = positive_mask & non_canonical_mask
     
-    # Get unique pair types from positive non-canonical pairs
     unique_pair_types = np.unique(pair_types[positive_non_canonical_mask])
     
-    # Calculate accuracy for each pair type
     accuracies = []
     counts = []
     correct_counts = []
@@ -155,14 +151,12 @@ def plot_non_canonical_pair_accuracy(
         counts.append(total_count)
         correct_counts.append(correct_pred)
     
-    # Create bar plot
     bars = ax.bar(unique_pair_types, accuracies)
     ax.set_xlabel("Non-canonical Pair Type")
     ax.set_ylabel("Prediction Accuracy")
     ax.set_title(title)
     ax.tick_params(axis='x', rotation=45)
     
-    # Add count labels on top of bars
     for bar, correct_count, total_count in zip(bars, correct_counts, counts):
         height = bar.get_height()
         ax.text(

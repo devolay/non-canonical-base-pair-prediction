@@ -1,5 +1,5 @@
-from __future__ import annotations
-import argparse, pathlib
+import argparse
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,7 +11,7 @@ from torch_geometric.data import Batch
 
 from pair_prediction.constants import BASE_DIR
 from pair_prediction.data.dataset import LinkPredictionDataset
-from pair_prediction.model.rinalmo_link_predictor_2d import RiNAlmoLinkPredictionModel
+from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
 from pair_prediction.model.utils import enumerate_negative_candidates
 
 
@@ -24,7 +24,7 @@ PALETTE = [
 CMAP_CONT = LinearSegmentedColormap.from_list("custom_nc", PALETTE, N=256)
 
 
-def load_model(ckpt_path: pathlib.Path, device: torch.device) -> RiNAlmoLinkPredictionModel:
+def load_model(ckpt_path: Path, device: torch.device) -> RiNAlmoLinkPredictionModel:
     model = RiNAlmoLinkPredictionModel(
         in_channels=1280,
         gnn_channels=[1280, 512, 256],
@@ -126,21 +126,21 @@ def main(args: argparse.Namespace) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device:", device)
 
-    ds = LinkPredictionDataset(pathlib.Path(args.data_root), mode="validation")
+    ds = LinkPredictionDataset(Path(args.data_root), mode="validation")
     g_idx = args.graph_idx
     if g_idx < 0 or g_idx >= len(ds):
         raise ValueError(f"--graph-idx must be in [0, {len(ds)-1}]")
     data = ds[g_idx].to(device)
     batch = Batch.from_data_list([data])
 
-    model = load_model(pathlib.Path(args.checkpoint), device)
+    model = load_model(Path(args.checkpoint), device)
     plot_single_graph(batch, model, device, args.temperature)
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Plot losses for one validation graph.")
-    p.add_argument("--data-root", type=str, default=str(BASE_DIR / "data"))
-    p.add_argument("--checkpoint", type=str, default="/home/inf141171/non-canonical-base-pair-prediction/models/model.ckpt", help="Path to model .ckpt")
+    p.add_argument("--data-root", type=Path, default= BASE_DIR / "data")
+    p.add_argument("--checkpoint", type=Path, default = BASE_DIR / "models" / "model.ckpt", help="Path to model .ckpt")
     p.add_argument("--graph-idx", type=int, default=0, help="Which validation graph to plot")
     p.add_argument("--temperature", type=float, default=1.0, help="Soft-max temperature")
     return p

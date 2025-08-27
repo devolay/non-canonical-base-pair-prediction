@@ -1,9 +1,7 @@
-from __future__ import annotations
-
 import argparse
-import importlib
 import json
 import sys
+from pathlib import Path
 from collections import defaultdict, Counter
 from typing import Any, Dict, List, Optional
 
@@ -11,7 +9,8 @@ import numpy as np
 import torch
 from torch_geometric.loader import DataLoader
 
-from pair_prediction.model.rinalmo_link_predictor_2d import RiNAlmoLinkPredictionModel
+from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
+from pair_prediction.constants import BASE_DIR
 from pair_prediction.model.utils import get_negative_edges
 from pair_prediction.data.utils import load_dataset
 
@@ -176,7 +175,7 @@ def _write_csv(path: str, rows: List[Dict[str, Any]]):
 def main(argv: Optional[List[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Per-graph case-study stats (Top-K best / Bottom-K worst by F1).")
     p.add_argument("--batch-size", type=int, default=1, help="Eval batch size.")
-    p.add_argument("--model-path", type=str, default="/home/inf141171/non-canonical-base-pair-prediction/models/model.ckpt",)
+    p.add_argument("--model-path", type=Path, default=BASE_DIR / "models" / "model.ckpt")
     p.add_argument("--threshold", type=float, default=0.5, help="Sigmoid threshold for positive class.")
     p.add_argument("--out-csv", type=str, default=None, help="Path to write ALL results as CSV.")
     p.add_argument("--out-json", type=str, default=None, help="Path to write ALL results as JSON.")
