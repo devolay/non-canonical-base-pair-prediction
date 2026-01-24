@@ -68,7 +68,7 @@ class LinkPredictionDataset(InMemoryDataset):
             amt_matrix = read_matrix_file(amt_file_path)
 
             try:
-                graph = create_rna_graph(seq, amt_matrix)
+                graph = create_rna_graph(details, amt_matrix)
             except ValueError as e:
                 raise ValueError(
                     f"Error creating graph for {file_stem}: {e}"

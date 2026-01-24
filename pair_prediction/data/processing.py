@@ -34,7 +34,7 @@ def one_hot_edges(edges_matrix: np.ndarray, num_classes: int = 15) -> np.ndarray
     return one_hot_matrix
 
 
-def create_rna_graph(seq: str, pairings_matrix: np.ndarray, simple: bool = True) -> nx.Graph:
+def create_rna_graph(details: list[dict], pairings_matrix: np.ndarray, simple: bool = True) -> nx.Graph:
     """
     Creates a NetworkX graph fromsa sequence and an edge matrix.
 
@@ -42,7 +42,11 @@ def create_rna_graph(seq: str, pairings_matrix: np.ndarray, simple: bool = True)
     The edge matrix is used to determine the edges between nodes.
 
     Args:
-        seq (str): RNA sequence
+        details (list of dict): List containing residue details with keys:
+            - res_number (int): The numeric residue index.
+            - chain_id (str): The chain identifier.
+            - res_type (str): The single-letter residue code.
+            - res_id (str): The numeric part of the residue identifier.
         pairings_matrix (np.ndarray): Matrix containing pair information where:
             - 0: no pair
             - 1: canonical pair
@@ -50,8 +54,10 @@ def create_rna_graph(seq: str, pairings_matrix: np.ndarray, simple: bool = True)
         simple (bool): If True, simplifies edge types to just "canonical" and "non-canonical"
     """
     G = nx.Graph()
+    seq = "".join([res['res_type'] for res in details])
+
     nodes_features = one_hot_encode_sequence(seq)
-    for i, node in enumerate(seq):
+    for i, node in enumerate(details):
         G.add_node(i, features=nodes_features[i])
 
     bond_matrix = get_phosphodiester_bonds_matrix(seq)
@@ -65,6 +71,8 @@ def create_rna_graph(seq: str, pairings_matrix: np.ndarray, simple: bool = True)
             features = edges_features[i, j]
             match edge_type:
                 case 1:
+                    if details[i]['chain_id'] != details[j]['chain_id']:
+                        continue
                     G.add_edge(i, j, features=features, edge_type="phosphodiester", pair_type=0)
                 case 2:
                     G.add_edge(i, j, features=features, edge_type="canonical", pair_type=1)
