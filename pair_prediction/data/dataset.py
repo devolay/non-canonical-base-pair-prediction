@@ -8,7 +8,7 @@ from torch_geometric.utils import from_networkx
 
 from pair_prediction.data.processing import create_rna_graph
 from pair_prediction.data.read import read_idx_file, read_matrix_file
-from pair_prediction.constants import FAMILY_MAPPING_FILE, TRAIN_FAMILIES
+from pair_prediction.constants import FAMILY_MAPPING_FILE, TRAIN_FAMILIES, BENCHMARK_IDXS
 
 
 class LinkPredictionDataset(InMemoryDataset):
@@ -37,14 +37,22 @@ class LinkPredictionDataset(InMemoryDataset):
 
     @property
     def raw_file_names(self):
+        benchmark_idxs = set(pd.read_csv(osp.join(self.raw_dir, BENCHMARK_IDXS))['idx'].tolist())
         match self.mode:
             case "train":
                 family_mapping = pd.read_csv(osp.join(self.raw_dir, FAMILY_MAPPING_FILE))
-                family_mapping = family_mapping[family_mapping['rfam_name'].isin(TRAIN_FAMILIES)]
+                family_mapping = family_mapping[
+                    family_mapping['rfam_name'].isin(TRAIN_FAMILIES) & 
+                    ~family_mapping['pdb_id'].isin(benchmark_idxs)
+                ]
                 return sorted(family_mapping['id'].values.tolist())
             case "validation":
                 family_mapping = pd.read_csv(osp.join(self.raw_dir, FAMILY_MAPPING_FILE))
-                family_mapping = family_mapping[~family_mapping['rfam_name'].isin(TRAIN_FAMILIES)]
+                benchmark_idxs = pd.read_csv(osp.join(self.raw_dir, BENCHMARK_IDXS))
+                family_mapping = family_mapping[
+                    ~family_mapping['rfam_name'].isin(TRAIN_FAMILIES) & 
+                    ~family_mapping['pdb_id'].isin(benchmark_idxs)
+                ]
                 return sorted(family_mapping['id'].values.tolist())
             case _:
                 raw_dir = osp.join(self.raw_dir, "idxs")
