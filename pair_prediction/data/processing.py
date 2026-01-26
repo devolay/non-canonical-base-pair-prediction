@@ -1,5 +1,6 @@
 import numpy as np
 import networkx as nx
+import re
 from sklearn.preprocessing import OneHotEncoder
 
 
@@ -66,12 +67,16 @@ def create_rna_graph(details: list[dict], pairings_matrix: np.ndarray, simple: b
     edges_matrix = bond_matrix + pairings_matrix
     edges_features = one_hot_edges(edges_matrix)
     for i in range(len(seq)):
+        res_id_i = int(re.sub("[^0-9]", "", details[i]['res_id']))
+        chain_id_i = details[i]['chain_id']
         for j in range(i + 1, len(seq)):
+            res_id_j = int(re.sub("[^0-9]", "", details[j]['res_id']))
+            chain_id_j = details[j]['chain_id']
             edge_type = edges_matrix[i, j]
             features = edges_features[i, j]
             match edge_type:
                 case 1:
-                    if details[i]['chain_id'] != details[j]['chain_id']:
+                    if chain_id_i != chain_id_j or abs(res_id_i - res_id_j) != 1:
                         continue
                     G.add_edge(i, j, features=features, edge_type="phosphodiester", pair_type=0)
                 case 2:

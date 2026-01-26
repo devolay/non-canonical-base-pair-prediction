@@ -13,7 +13,7 @@ from sklearn.metrics import (
 from pair_prediction.model.model import LinkPredictorModel
 from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
 from pair_prediction.model.global_model import LinkPredictorGlobalModel
-from pair_prediction.model.utils import get_negative_edges, sample_negative_edges
+from pair_prediction.model.utils import get_negative_edges
 from pair_prediction.config import ModelConfig
 from pair_prediction.visualization.metrics import (
     plot_confusion_matrix,
@@ -141,17 +141,17 @@ class LitWrapper(pl.LightningModule):
         with torch.cuda.amp.autocast():
             node_embeddings = self.model(batch.features, rna_tokens, message_passing_edge_index)
 
-            pos_edge_index = batch.edge_index[:, edge_mask]
-            pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, batch.batch)
-            pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=torch.float32)
+        pos_edge_index = batch.edge_index[:, edge_mask]
+        pos_logits = self.model.compute_edge_logits(node_embeddings, pos_edge_index, batch.batch)
+        pos_labels = torch.ones(pos_logits.size(0), device=self.device, dtype=pos_logits.dtype)
 
-            neg_edge_index = get_negative_edges(
-                batch, validation=validation, sample_ratio=self.negative_sample_ratio, 
-                hard_negative_sampling=self.hard_negative_sampling, model=self.model, node_embeddings=node_embeddings,
-                hard_negative_sampling_temperature=self.hard_negative_sampling_temperature
-            )
-            neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, batch.batch)
-            neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=torch.float32)
+        neg_edge_index = get_negative_edges(
+            batch, validation=validation, sample_ratio=self.negative_sample_ratio, 
+            hard_negative_sampling=self.hard_negative_sampling, model=self.model, node_embeddings=node_embeddings,
+            hard_negative_sampling_temperature=self.hard_negative_sampling_temperature
+        )
+        neg_logits = self.model.compute_edge_logits(node_embeddings, neg_edge_index, batch.batch)
+        neg_labels = torch.zeros(neg_logits.size(0), device=self.device, dtype=pos_logits.dtype)
 
         all_logits = torch.cat([pos_logits, neg_logits], dim=0)
         all_labels = torch.cat([pos_labels, neg_labels], dim=0)

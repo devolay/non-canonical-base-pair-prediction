@@ -38,7 +38,6 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         self.dropout = dropout
         self.tokenizer = Alphabet()
         self.rinalmo = RiNALMo(model_config("giga"))
-        self.pad_idx = self.rinalmo.config['model']['embedding'].padding_idx
         self.rna_indices = torch.tensor([self.tokenizer.get_idx(token) for token in RNA_TOKENS])
 
         self.gnn_convs = nn.ModuleList()
@@ -64,9 +63,7 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         
     def forward(self, x: torch.Tensor, tokens: torch.Tensor, edge_index: torch.Tensor):
         """
-        Forward pass:
-          - Computes node embeddings with the GNN encoder.
-          - Computes a global graph representation with the CNN encoder.
+        Computes enriched node embeddings with the GNN encoder.
           
         Args:
             x (torch.Tensor): Node feature matrix of shape [total_nodes, in_channels].
@@ -79,7 +76,7 @@ class RiNAlmoLinkPredictionModel(nn.Module):
         node_embeddings = self.rinalmo(tokens)["representation"]
         nucleotide_mask = torch.isin(tokens, self.rna_indices.to(tokens.device))
         node_embeddings = node_embeddings[nucleotide_mask]
-
+        
         for conv in self.gnn_convs:
             node_embeddings = conv(node_embeddings, edge_index)
             node_embeddings = F.dropout(node_embeddings, p=self.dropout, training=self.training)
@@ -96,7 +93,7 @@ class RiNAlmoLinkPredictionModel(nn.Module):
     ) -> torch.Tensor:
         """
         Compute logits for edges by concatenating local node embeddings (src & dst)
-        with the corresponding global representation.
+        and passing them through the CNN prediction head.
 
         Args:
             node_embeddings (torch.Tensor): Node embeddings [total_nodes, hidden_channels].
