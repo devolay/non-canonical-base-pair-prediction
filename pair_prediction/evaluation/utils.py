@@ -1,6 +1,7 @@
 import os
 import pickle
 import torch
+import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -11,6 +12,7 @@ from sklearn.metrics import (
     f1_score,
     average_precision_score,
 )
+from torch.utils.data import DataLoader
 
 from pair_prediction.visualization.metrics import (
     plot_confusion_matrix,
@@ -18,6 +20,42 @@ from pair_prediction.visualization.metrics import (
     plot_probability_distribution,
     plot_pr_curve
 )
+from pair_prediction.data.dataset import LinkPredictionDataset
+
+
+def load_dataset(dataset_name: str, root: str = 'data') -> LinkPredictionDataset:
+    """
+    Load a dataset by name.
+    """
+    if dataset_name == "validation":
+        dataset = LinkPredictionDataset(root=root, mode="validation")
+    else:
+        dataset = LinkPredictionDataset(root=f"{root}/evaluation/{dataset_name}_clean")
+    return dataset
+
+def export_dataset_to_fasta(dataset: LinkPredictionDataset,  output_dir: str, batchsize: int = 1):
+    """
+    Iterate over the dataset and save each batch into <output_dir> 
+    with a `.fasat` extension. 
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    if batchsize:
+        dataloader = DataLoader(dataset, batch_size=batchsize, shuffle=False)
+        for batch_idx, batch in tqdm(enumerate(dataloader)):
+            filename = os.path.join(output_dir, f"batch_{batch_idx}.fasta")
+            ids = batch.id
+            seqs = batch.seq
+
+            with open(filename, 'w') as f:
+                for seq_id, seq in zip(ids, seqs):
+                    f.write(f">{seq_id}\n{seq}\n")
+    else:
+        filename = os.path.join(output_dir, f"batch.fasta")
+        with open(filename, 'w') as f:
+            for data in dataset:
+                seq = data.seq
+                id = data.id
+                f.write(f">{id}\n{seq}\n")
 
 def collect_and_save_metrics(outputs, output_path):
     preds = torch.cat([x["preds"] for x in outputs], dim=0)

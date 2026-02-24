@@ -51,7 +51,6 @@ def sincfold_eval(
         outputs = []
         for data in tqdm(dataloader, desc="Evaluating predictions"):
             seq_id = data.id[0]
-            seq = data.seq[0] 
             
             edge_types = np.concatenate(data.edge_type)
             edge_index = data.edge_index
@@ -82,8 +81,7 @@ def sincfold_eval(
             predictions = probabilities > 0.5
 
             outputs.append({
-                "id": seq_id,
-                "seq": seq,
+                "data": data,
                 "preds": predictions,
                 "labels": all_labels,
                 "probabilities": probabilities,

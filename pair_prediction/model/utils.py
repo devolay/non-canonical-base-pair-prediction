@@ -13,7 +13,7 @@ CANONICAL_IDXS = [3, 6, 9, 12, 11, 14]
 
 def create_pair_matrix(seq: str, device=None):
     """Generate a pair matrix for a given sequence."""
-    idx = torch.tensor([BASE2IDX[b] for b in seq], device=device)
+    idx = torch.tensor([BASE2IDX.get(b, 4) for b in seq], device=device)
     return 4 * idx[:, None] + idx[None, :]
 
 
@@ -39,14 +39,14 @@ def enumerate_negative_candidates(batched_data: Data) -> Tuple[torch.Tensor, tor
     graph_ids:   List[torch.Tensor] = []
 
     for g in range(num_graphs):
-        start, end = ptr[g].item(), ptr[g + 1].item()
+        start, _ = ptr[g].item(), ptr[g + 1].item()
         seq  = batched_data.seq[g]
 
         pos_mask  = pos_adj[g][:len(seq), :len(seq)]
 
         # candidate edges
         pair_matrix = create_pair_matrix(seq, device=device)                 # [L,L]
-        canonical_table = torch.zeros(16, device=device, dtype=torch.bool)
+        canonical_table = torch.zeros(25, device=device, dtype=torch.bool)
         canonical_table[CANONICAL_IDXS] = True
         candidate = ~canonical_table[pair_matrix]
 

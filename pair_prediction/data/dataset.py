@@ -1,14 +1,18 @@
 import os
 import os.path as osp
 import pandas as pd
-from tqdm import tqdm
+import logging
 
+from tqdm import tqdm
 from torch_geometric.data import InMemoryDataset
 from torch_geometric.utils import from_networkx
 
 from pair_prediction.data.processing import create_rna_graph
 from pair_prediction.data.read import read_idx_file, read_matrix_file
-from pair_prediction.constants import FAMILY_MAPPING_FILE, TRAIN_FAMILIES, BENCHMARK_IDXS
+from pair_prediction.constants import FAMILY_MAPPING_FILE, TRAIN_FAMILIES, BENCHMARK_IDXS, BASE_DIR, RFAM_FAMILIES_FILE
+from pair_prediction.data.utils import get_rfam_family
+
+logger = logging.getLogger(__name__)
 
 
 class LinkPredictionDataset(InMemoryDataset):
@@ -37,9 +41,9 @@ class LinkPredictionDataset(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        benchmark_idxs = set(pd.read_csv(osp.join(self.raw_dir, BENCHMARK_IDXS))['idx'].tolist())
         match self.mode:
             case "train":
+                benchmark_idxs = set(pd.read_csv(osp.join(self.raw_dir, BENCHMARK_IDXS))['idx'].tolist())
                 family_mapping = pd.read_csv(osp.join(self.raw_dir, FAMILY_MAPPING_FILE))
                 family_mapping = family_mapping[
                     family_mapping['rfam_name'].isin(TRAIN_FAMILIES) & 
@@ -47,17 +51,23 @@ class LinkPredictionDataset(InMemoryDataset):
                 ]
                 return sorted(family_mapping['id'].values.tolist())
             case "validation":
+                benchmark_idxs = set(pd.read_csv(osp.join(self.raw_dir, BENCHMARK_IDXS))['idx'].tolist())
                 family_mapping = pd.read_csv(osp.join(self.raw_dir, FAMILY_MAPPING_FILE))
-                benchmark_idxs = pd.read_csv(osp.join(self.raw_dir, BENCHMARK_IDXS))
                 family_mapping = family_mapping[
                     ~family_mapping['rfam_name'].isin(TRAIN_FAMILIES) & 
                     ~family_mapping['pdb_id'].isin(benchmark_idxs)
                 ]
                 return sorted(family_mapping['id'].values.tolist())
             case _:
+                rfam_mapping = pd.read_csv(osp.join(BASE_DIR, "data", "raw", RFAM_FAMILIES_FILE), sep='\t', header=None)
                 raw_dir = osp.join(self.raw_dir, "idxs")
                 raw_files = [f for f in os.listdir(raw_dir) if f.endswith(".idx")]
-                return sorted(raw_files)        
+                non_training_faimilies = [f for f in raw_files if get_rfam_family(rfam_mapping, f[:4]) not in TRAIN_FAMILIES]
+
+                if len(non_training_faimilies) < len(raw_files):
+                    print(f"Filtered out {len(raw_files) - len(non_training_faimilies)} benchmark sequences belonging to training families.")
+
+                return sorted(non_training_faimilies)        
 
     @property
     def processed_file_names(self):
@@ -66,6 +76,7 @@ class LinkPredictionDataset(InMemoryDataset):
     def process(self):
         data_list = []
         raw_idx_files = self.raw_file_names
+        family_mapping_file = pd.read_csv(osp.join(BASE_DIR, "data", "raw", RFAM_FAMILIES_FILE), sep='\t', header=None)
 
         for idx_file_name in tqdm(raw_idx_files, desc=f"Processing {self.prefix} data"):
             file_stem, _ = osp.splitext(idx_file_name)

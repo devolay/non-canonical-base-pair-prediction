@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
+import tempfile
 
 from pathlib import Path
 from shutil import rmtree
@@ -81,8 +82,18 @@ def ufold_eval(
     ct_source: str | Path,
     **kwargs
 ) -> List[Dict[str, Any]]:
-    ct_dir = Path(ct_source)
-    tmp_dir: Path | None = None        
+    ct_source = Path(ct_source)
+    tmp_dir: Path | None = None
+    
+    # If ct_source is a file (concatenated CT file), split it first
+    if ct_source.is_file():
+        tmp_dir = Path(tempfile.mkdtemp())
+        print(f"Splitting multi-sequence CT file to {tmp_dir}...")
+        split_multi_ct(str(ct_source), str(tmp_dir))
+        ct_dir = tmp_dir
+    else:
+        ct_dir = ct_source
+        
     try:
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
         outputs = []

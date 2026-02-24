@@ -1,33 +1,8 @@
-import os
-from tqdm import tqdm
-from torch_geometric.loader import DataLoader
-from pair_prediction.data.dataset import LinkPredictionDataset
+import requests
+import pandas as pd
 
 
-def export_dataset_to_fasta(dataset: LinkPredictionDataset,  output_dir: str, batchsize: int = 1):
-    """
-    Iterate over the dataset and save each batch into <output_dir> 
-    with a `.fasat` extension. 
-    """
-    os.makedirs(output_dir, exist_ok=True)
-    if batchsize:
-        dataloader = DataLoader(dataset, batch_size=batchsize, shuffle=False)
-        for batch_idx, batch in tqdm(enumerate(dataloader)):
-            filename = os.path.join(output_dir, f"batch_{batch_idx}.fasta")
-            ids = batch.id
-            seqs = batch.seq
-
-            with open(filename, 'w') as f:
-                for seq_id, seq in zip(ids, seqs):
-                    f.write(f">{seq_id}\n{seq}\n")
-    else:
-        filename = os.path.join(output_dir, f"batch.fasta")
-        with open(filename, 'w') as f:
-            for data in dataset:
-                seq = data.seq
-                id = data.id
-                f.write(f">{id}\n{seq}\n")
-                    
+RFAM_API_URL = URL = "https://rfam.org/family/{rfam_id}?content-type=application/json"                  
 
 def load_fasta_sequences(fasta_file: str):
     """
@@ -50,12 +25,29 @@ def save_fasta_sequences(sequences: dict, output_file: str):
             f.write(f">{seq_id}\n{seq}\n")
 
 
-def load_dataset(dataset_name: str, root: str = 'data') -> LinkPredictionDataset:
+def get_rfam_id(mapping_file: pd.DataFrame, pdb_id: str) -> str:
     """
-    Load a dataset by name.
+    Get the Rfam ID for a given PDB ID.
     """
-    if dataset_name == "validation":
-        dataset = LinkPredictionDataset(root=root, mode="validation")
-    else:
-        dataset = LinkPredictionDataset(root=f"{root}/evaluation/{dataset_name}_clean")
-    return dataset
+    pdb_id = pdb_id.lower().strip()
+    if pdb_id not in mapping_file[1].values:
+        raise ValueError(f"PDB ID {pdb_id} not found in mapping.")
+    
+    rfam_id = mapping_file.loc[mapping_file[1] == pdb_id, 0].values[0]
+    return rfam_id
+
+
+def get_rfam_family(mapping_file: pd.DataFrame, pdb_id: str) -> str:
+    """
+    Get the Rfam family for a given PDB ID.
+    """
+
+    try:
+        rfam_id = get_rfam_id(mapping_file, pdb_id)
+    except ValueError:
+        return None
+    
+    response = requests.get(RFAM_API_URL.format(rfam_id=rfam_id))
+    response.raise_for_status()
+    data = response.json()
+    return data['rfam']['id']

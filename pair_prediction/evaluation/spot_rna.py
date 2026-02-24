@@ -92,8 +92,7 @@ def spotrna_eval(
             all_preds = (all_scores >= SPOTRNA_THRESHOLD)  
 
             outputs.append({
-                "id": seq_id,
-                "seq": data.seq[0],
+                "data": data,
                 "preds": torch.from_numpy(all_preds.astype(np.float32)),
                 "labels": all_labels,
                 "probabilities": torch.from_numpy(all_scores.astype(np.float32)),

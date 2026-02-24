@@ -6,7 +6,7 @@ from typing import List
 from pair_prediction.evaluation import EVAL_FUNCTIONS, collect_and_save_metrics
 from pair_prediction.evaluation.ufold import split_multi_ct
 from pair_prediction.model.rinalmo_link_predictor import RiNAlmoLinkPredictionModel
-from pair_prediction.data.utils import load_dataset
+from pair_prediction.evaluation.utils import load_dataset
 from pair_prediction.constants import BASE_DIR
 
 def validate_multi_input(ctx, param, value):
@@ -17,7 +17,7 @@ def validate_multi_input(ctx, param, value):
 
 @click.command()
 @click.option('--models', callback=validate_multi_input, required=True, help='List of model names to evaluate (e.g., rinalmo, sincfold)')
-@click.option('--model-path', type=click.Path(exists=True), default=(BASE_DIR / "models" / "model.ckpt"), help='Path to the directory containing model checkpoints')
+@click.option('--model-path', type=click.Path(exists=True), default=None, help='Path to the directory containing model checkpoints')
 @click.option('--datasets', callback=validate_multi_input, required=True, help='List of dataset names to evaluate (e.g., rinalmo, sincfold)')
 @click.option('--output_dir', type=click.Path(), default=(BASE_DIR / "outputs"), required=True, help='Directory to save evaluation results')
 @click.option('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
@@ -33,6 +33,7 @@ def main(models: List[str], model_path: Path, datasets: List[str], output_dir: P
         for dataset_name in datasets:
             dataset = load_dataset(dataset_name)
             print(f"Evaluating model {model_name} on dataset {dataset_name}...")
+            
             eval_fn = EVAL_FUNCTIONS.get(model_name)
             if eval_fn is None:
                 print(f"No evaluation function for model {model_name}. Skipping.")
@@ -63,12 +64,12 @@ def main(models: List[str], model_path: Path, datasets: List[str], output_dir: P
                         device=device,
                     )
                 case 'ufold':
-                    ct_files_output = output_dir / f"{model_name}_{dataset_name}" / f"save_ct_file"
-                    if not ct_files_output.is_dir():
-                        raise FileNotFoundError(f"Expected results directory {ct_files_output} not found.")
+                    ufold_ct_results = output_dir / f"{model_name}_{dataset_name}" / f"all_sequences_result.ct"
+                    if not ufold_ct_results.is_file():
+                        raise FileNotFoundError(f"Expected results file {ufold_ct_results} not found.")
                     outputs = eval_fn(
                         dataset=dataset,
-                        ct_source=ct_files_output,
+                        ct_source=ufold_ct_results,
                     )
 
             collect_and_save_metrics(outputs, output_dir / f"{model_name}_{dataset_name}")
